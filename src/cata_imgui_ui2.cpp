@@ -1,4 +1,5 @@
 #include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_lists.h"
 
 #if defined( TILES )
 
@@ -188,6 +189,8 @@ void draw()
     draw_controls_window();
     draw_main_window();
     draw_second_window();
+    // PR-1.5 B batch: list and table components.
+    lists::draw();
 }
 
 } // namespace ui2
