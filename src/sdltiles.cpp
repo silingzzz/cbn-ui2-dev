@@ -5,6 +5,7 @@
 #    include "avatar.h"
 #    include "cata_tiles.h"
 #    include "cata_utility.h"
+#    include "cata_imgui.h"
 #    include "catacharset.h"
 #    include "color.h"
 #    include "color_loader.h"
@@ -107,6 +108,25 @@ std::shared_ptr<cata_tiles> tilecontext;
 std::shared_ptr<cata_tiles> overmap_tilecontext;
 static Uint64 lastupdate = 0;
 static uint32_t interval = 25;
+
+// Which side owns the current mouse-button press, indexed by SDL button id.
+// A release is only turned into game input when the matching press was also
+// owned by the game: a press consumed by the ImGui overlay must never leak its
+// release into the game, and a release whose press was lost (focus loss) is an
+// orphan that must be dropped rather than turned into a phantom click.
+enum mouse_button_owner : int8_t {
+    MOUSE_OWNER_NONE = 0,
+    MOUSE_OWNER_IMGUI = 1,
+    MOUSE_OWNER_GAME = 2,
+};
+static int8_t mouse_button_owner[8] = {};
+
+static void reset_mouse_button_ownership()
+{
+    for( int8_t &owner : mouse_button_owner ) {
+        owner = MOUSE_OWNER_NONE;
+    }
+}
 static bool needupdate = false;
 static bool need_invalidate_framebuffers = false;
 static bool clear_display_buffer_before_redraw = false;
@@ -348,6 +368,8 @@ static void WinCreate()
     SDL_SetWindowMinimumSize( ::window.get(), fontwidth * FULL_SCREEN_WIDTH * scaling_factor,
                               fontheight * FULL_SCREEN_HEIGHT * scaling_factor );
 
+    cata_imgui::init( ::window.get(), renderer.get() );
+
 #if defined(__ANDROID__)
     // TODO: Not too sure why this works to make fullscreen on Android behave. :/
     if( fullscreen || ( window_flags & SDL_WINDOW_MAXIMIZED ) ) {
@@ -402,6 +424,10 @@ static void WinCreate()
 
 static void WinDestroy()
 {
+    // ImGui backends keep raw window/renderer pointers, so they must be torn
+    // down before those SDL objects are destroyed below.
+    cata_imgui::shutdown();
+
 #if defined(__ANDROID__)
     touch_joystick.reset();
 #endif
@@ -525,7 +551,9 @@ void refresh_display()
     draw_quick_shortcuts();
     draw_virtual_joystick();
 #endif
+    cata_imgui::render( renderer.get() );
     SDL_RenderPresent( renderer.get() );
+    cata_imgui::trace_present();
     SetRenderTarget( renderer, display_buffer );
 }
 
@@ -3221,6 +3249,9 @@ static void CheckMessages()
     bool render_target_reset = false;
 
     while( SDL_PollEvent( &ev ) ) {
+        if( cata_imgui::process_event( ev ) ) {
+            continue;
+        }
         switch( ev.type ) {
 #if defined(__ANDROID__)
             // SDL will send a focus lost event whenever the app loses focus (eg. lock screen, switch app focus etc.)
@@ -3247,6 +3278,17 @@ static void CheckMessages()
                 needupdate = true;
                 break;
 #endif
+#if !defined(__ANDROID__)
+            case SDL_EVENT_WINDOW_FOCUS_LOST:
+                // A release may never arrive after focus loss. Forget the button
+                // states so a later orphan release cannot become a phantom game
+                // click, and a stuck owner cannot swallow a future press.
+                reset_mouse_button_ownership();
+                // Same for keyboard: a latched owner would otherwise swallow the
+                // release and leave that key unusable.
+                cata_imgui::forget_key_ownership();
+                break;
+#endif
             case SDL_EVENT_WINDOW_SHOWN:
             case SDL_EVENT_WINDOW_MINIMIZED:
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -3270,6 +3312,8 @@ static void CheckMessages()
                 render_target_reset = true;
                 break;
             case SDL_EVENT_KEY_DOWN: {
+                // Reaching here means the ImGui overlay did not take this key.
+                cata_imgui::trace_game_mouse( 3 );
 #if defined(__ANDROID__)
                 // Toggle virtual keyboard with Android back button. For some reason I get double inputs, so ignore everything once it's already down.
                 if( ev.key.key == SDLK_AC_BACK && ac_back_down_time == 0 ) {
@@ -3403,27 +3447,59 @@ static void CheckMessages()
                         SDL_ShowCursor();
                     }
 
-                    // Only monitor motion when cursor is visible
-                    last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
+                    // Only feed the game's mouseover/highlight pipeline when the
+                    // ImGui overlay is not consuming the mouse; otherwise both
+                    // react to the same movement.
+                    if( !cata_imgui::want_capture_mouse() ) {
+                        last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
+                        cata_imgui::trace_game_mouse( 0 );
+                    }
                 }
                 break;
 
-            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+                // CBN turns a click into game input on *release*, so the press
+                // only records which side owns it. That lets a release that
+                // happens elsewhere still go to the side that saw the press.
+                const size_t btn = ev.button.button < 8 ? ev.button.button : 0;
+                mouse_button_owner[btn] = cata_imgui::want_capture_mouse() ?
+                                          MOUSE_OWNER_IMGUI : MOUSE_OWNER_GAME;
+                break;
+            }
+
+            case SDL_EVENT_MOUSE_BUTTON_UP: {
+                const size_t btn = ev.button.button < 8 ? ev.button.button : 0;
+                const int8_t owner = mouse_button_owner[btn];
+                mouse_button_owner[btn] = MOUSE_OWNER_NONE;
+                if( owner != MOUSE_OWNER_GAME ) {
+                    // ImGui owned the press, or the press was lost to a focus
+                    // change: never emit a game click for it.
+                    break;
+                }
                 switch( ev.button.button ) {
                     case SDL_BUTTON_LEFT:
                         last_input = input_event( MOUSE_BUTTON_LEFT, input_event_t::mouse );
+                        cata_imgui::trace_game_mouse( 1 );
                         break;
                     case SDL_BUTTON_RIGHT:
                         last_input = input_event( MOUSE_BUTTON_RIGHT, input_event_t::mouse );
+                        cata_imgui::trace_game_mouse( 1 );
                         break;
                 }
-                break;
+            }
+            break;
 
             case SDL_EVENT_MOUSE_WHEEL:
+                if( cata_imgui::want_capture_mouse() ) {
+                    // Scrolling over the overlay belongs to ImGui.
+                    break;
+                }
                 if( ev.wheel.y > 0 ) {
                     last_input = input_event( SCROLLWHEEL_UP, input_event_t::mouse );
+                    cata_imgui::trace_game_mouse( 2 );
                 } else if( ev.wheel.y < 0 ) {
                     last_input = input_event( SCROLLWHEEL_DOWN, input_event_t::mouse );
+                    cata_imgui::trace_game_mouse( 2 );
                 }
                 break;
 
@@ -3618,6 +3694,24 @@ static void CheckMessages()
     }
     if( needupdate ) {
         try_sdl_update();
+    }
+    // Keep the ImGui overlay responsive. Its frames are drawn inside
+    // refresh_display(), which otherwise only runs when the *game* wants a
+    // repaint -- on the main menu that is essentially never while idle, so the
+    // overlay would freeze and never consume its queued input. Pump at ~30 Hz
+    // only while the overlay window is actually shown; the game simulation is
+    // untouched (this only repaints the current frame).
+    if( cata_imgui::should_pump_frames() ) {
+        static Uint64 last_imgui_pump = 0;
+        const Uint64 pump_now = SDL_GetTicks();
+        if( last_imgui_pump == 0 || pump_now - last_imgui_pump >= 33 ) {
+            last_imgui_pump = pump_now;
+            refresh_display();
+        }
+    } else if( cata_imgui::take_redraw_request() ) {
+        // The overlay just stopped showing: repaint once so its last frame is
+        // cleared instead of being frozen on screen.
+        refresh_display();
     }
     if( quit ) {
         exit_handler( 0 );
