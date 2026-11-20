@@ -1,4 +1,5 @@
 #include "cata_imgui.h"
+#include "cata_imgui_ui2.h"
 
 #if defined( TILES )
 
@@ -293,6 +294,8 @@ void toggle()
     }
     if( g_open ) {
         SDL_StartTextInput( g_window );
+        // Reopening the overlay must never leave the demo windows unreachable.
+        ui2::reset();
     } else {
         SDL_StopTextInput( g_window );
         g_redraw_pending = true;
@@ -525,6 +528,8 @@ auto render( SDL_Renderer *renderer ) -> void
     const bool drawn_open = g_open;
     if( g_open ) {
         draw_prototype_window();
+        // PR-1.5 component demo, kept out of the PR-1 diagnostic window.
+        ui2::draw();
     }
     // The window can also be closed from inside the frame (title bar X or the
     // 关闭 button). Schedule one repaint so the pixels actually go away, and the
