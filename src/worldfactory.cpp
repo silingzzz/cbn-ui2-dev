@@ -1219,6 +1219,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
 
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const bool hover_debug = std::getenv( "CBN_HOVER_DEBUG" ) != nullptr;
             bool hit_row = false;
             bool hit_control = false;
             for( const auto &rect : tab_hit_rects ) {
@@ -1284,6 +1285,17 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
             if( action == "SELECT" && hit_row ) {
                 action = "CONFIRM";
             }
+            if( hover_debug ) {
+                std::fprintf( stderr,
+                              "MODM action=%s cell=(%d,%d) row=%d control=%d header=%zu tab=%zu "
+                              "list_rows=%zu active_rows=%zu cur=(%zu,%zu)\n",
+                              action == "CONFIRM" ? "CONFIRM" : ( hit_row ? "HOVER" : "NONE" ),
+                              cell.x, cell.y, hit_row ? 1 : 0, hit_control ? 1 : 0,
+                              header_hit_rects.size(), tab_hit_rects.size(),
+                              list_hit_rects.rows.size(), active_hit_rects.rows.size(),
+                              cursel[0], cursel[1] );
+                std::fflush( stderr );
+            }
         }
 
         if( action == "DOWN" ) {
@@ -1296,6 +1308,12 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
             active_header = prev_header;
         } else if( action == "CONFIRM" ) {
             const std::vector<mod_id> &current_tab_mods = all_tabs[iCurrentTab].mods;
+            if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+                std::fprintf( stderr, "MODM confirm header=%zu tab=%zu cur=(%zu,%zu) active=%zu\n",
+                              active_header, iCurrentTab, cursel[0], cursel[1],
+                              active_mod_order.size() );
+                std::fflush( stderr );
+            }
             if( active_header == 0 && !current_tab_mods.empty() ) {
                 // try-add
                 const mod_id &to_add = current_tab_mods[cursel[0]];
