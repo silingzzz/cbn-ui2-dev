@@ -5,8 +5,10 @@
 #include <vector>
 #include <utility>
 
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
 #include "input.h"
+#include "point.h"
 
 class JsonIn;
 
@@ -24,6 +26,9 @@ class help
 
         std::map<int, std::pair<std::string, std::vector<std::string> > > help_texts;
         std::vector< std::vector<std::string> > hotkeys;
+
+        /// Mouse hit areas of the help topic lines, recorded by draw_menu().
+        std::vector<std::pair<inclusive_rectangle<point>, size_t>> menu_hits;
 
         input_context ctxt;
 };

@@ -14,6 +14,7 @@
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "fstream_utils.h"
 #include "input.h"
@@ -115,14 +116,20 @@ void help::draw_menu( const catacurses::window &win )
 
     size_t half_size = help_texts.size() / 2 + 1;
     int second_column = divide_round_up( getmaxx( win ), 2 );
+    menu_hits.clear();
     for( size_t i = 0; i < help_texts.size(); i++ ) {
         std::string cat_name = _( help_texts[i].first );
         if( i < half_size ) {
             second_column = std::max( second_column, utf8_width( cat_name ) + 4 );
         }
 
-        shortcut_print( win, point( i < half_size ? 1 : second_column, y + i % half_size ),
-                        c_white, c_light_blue, cat_name );
+        const int cat_x = i < half_size ? 1 : second_column;
+        const int cat_y = y + i % half_size;
+        shortcut_print( win, point( cat_x, cat_y ), c_white, c_light_blue, cat_name );
+        menu_hits.emplace_back( inclusive_rectangle<point>( point( getbegx( win ) + cat_x,
+                               getbegy( win ) + cat_y ),
+                               point( getbegx( win ) + cat_x + utf8_width( cat_name ),
+                                       getbegy( win ) + cat_y ) ), i );
     }
 
     wnoutrefresh( win );
@@ -163,8 +170,54 @@ void help::display_help()
     ctxt.register_action( "CONFIRM" );
     // for the menu shortcuts
     ctxt.register_action( "ANY_INPUT" );
+    // Mouse: click a topic line.
+    ctxt.register_action( "SELECT" );
 
     std::string action;
+
+    // Opens the help topic at the given index.
+    const auto open_topic = [&]( const size_t i ) {
+        std::vector<std::string> i18n_help_texts;
+        i18n_help_texts.reserve( help_texts[i].second.size() );
+        std::transform( help_texts[i].second.begin(), help_texts[i].second.end(),
+                        std::back_inserter( i18n_help_texts ), []( const std::string & line ) {
+            std::string line_proc = _( line );
+            size_t pos = line_proc.find( "<press_", 0, 7 );
+            while( pos != std::string::npos ) {
+                size_t pos2 = line_proc.find( ">", pos, 1 );
+
+                std::string topic_action = line_proc.substr( pos + 7, pos2 - pos - 7 );
+                auto replace = "<color_light_blue>" + press_x( look_up_action( topic_action ), "", "" ) + "</color>";
+
+                if( replace.empty() ) {
+                    debugmsg( "Help json: Unknown action: %s", topic_action );
+                } else {
+                    line_proc = replace_all( line_proc, "<press_" + topic_action + ">", replace );
+                }
+
+                pos = line_proc.find( "<press_", pos2, 7 );
+            }
+            return line_proc;
+        } );
+
+        if( !i18n_help_texts.empty() ) {
+            ui.on_screen_resize( nullptr );
+
+            const auto get_w_help_border = [&]() {
+                init_windows( ui );
+                return w_help_border;
+            };
+
+            scrollable_text( get_w_help_border, _( " HELP " ),
+                             std::accumulate( i18n_help_texts.begin() + 1, i18n_help_texts.end(),
+                                              i18n_help_texts.front(),
+            []( const std::string & lhs, const std::string & rhs ) {
+                return lhs + "\n\n" + rhs;
+            } ) );
+
+            ui.on_screen_resize( init_windows );
+        }
+    };
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_border( w_help_border, BORDER_COLOR, _( " HELP " ), c_black_white );
@@ -176,50 +229,23 @@ void help::display_help()
         ui_manager::redraw();
 
         action = ctxt.handle_input();
+        if( action == "SELECT" ) {
+            // Mouse: a click on a topic line opens that topic.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &hit : menu_hits ) {
+                if( hit.first.contains( cell ) ) {
+                    open_topic( hit.second );
+                    action = "CONFIRM";
+                    break;
+                }
+            }
+            continue;
+        }
         std::string sInput = ctxt.get_raw_input().text;
         for( size_t i = 0; i < hotkeys.size(); ++i ) {
             for( const std::string &hotkey : hotkeys[i] ) {
                 if( sInput == hotkey ) {
-                    std::vector<std::string> i18n_help_texts;
-                    i18n_help_texts.reserve( help_texts[i].second.size() );
-                    std::transform( help_texts[i].second.begin(), help_texts[i].second.end(),
-                    std::back_inserter( i18n_help_texts ), [&]( std::string & line ) {
-                        std::string line_proc = _( line );
-                        size_t pos = line_proc.find( "<press_", 0, 7 );
-                        while( pos != std::string::npos ) {
-                            size_t pos2 = line_proc.find( ">", pos, 1 );
-
-                            std::string action = line_proc.substr( pos + 7, pos2 - pos - 7 );
-                            auto replace = "<color_light_blue>" + press_x( look_up_action( action ), "", "" ) + "</color>";
-
-                            if( replace.empty() ) {
-                                debugmsg( "Help json: Unknown action: %s", action );
-                            } else {
-                                line_proc = replace_all( line_proc, "<press_" + action + ">", replace );
-                            }
-
-                            pos = line_proc.find( "<press_", pos2, 7 );
-                        }
-                        return line_proc;
-                    } );
-
-                    if( !i18n_help_texts.empty() ) {
-                        ui.on_screen_resize( nullptr );
-
-                        const auto get_w_help_border = [&]() {
-                            init_windows( ui );
-                            return w_help_border;
-                        };
-
-                        scrollable_text( get_w_help_border, _( " HELP " ),
-                                         std::accumulate( i18n_help_texts.begin() + 1, i18n_help_texts.end(),
-                                                          i18n_help_texts.front(),
-                        []( const std::string & lhs, const std::string & rhs ) {
-                            return lhs + "\n\n" + rhs;
-                        } ) );
-
-                        ui.on_screen_resize( init_windows );
-                    }
+                    open_topic( i );
                     action = "CONFIRM";
                     break;
                 }

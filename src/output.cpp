@@ -372,6 +372,10 @@ void scrollable_text( const std::function<catacurses::window()> &init_window,
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: wheel scrolls, clicking the text area jumps to that position.
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
+    ctxt.register_action( "SELECT" );
 
     catacurses::window w;
     int width = 0;
@@ -416,7 +420,19 @@ void scrollable_text( const std::function<catacurses::window()> &init_window,
         ui_manager::redraw();
 
         action = ctxt.handle_input();
-        if( action == "UP" ) {
+        if( action == "SCROLL_UP" ) {
+            beg_line = std::max( 0, beg_line - 3 );
+        } else if( action == "SCROLL_DOWN" ) {
+            beg_line = std::min( max_beg_line, beg_line + 3 );
+        } else if( action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const int rel = cell.y - getbegy( w ) - text2.y;
+            if( rel >= 0 && rel < text_h && max_beg_line > 0 ) {
+                const double fraction = static_cast<double>( rel ) /
+                                        std::max( 1, text_h - 1 );
+                beg_line = static_cast<int>( max_beg_line * fraction );
+            }
+        } else if( action == "UP" ) {
             if( beg_line > 0 ) {
                 --beg_line;
             }
