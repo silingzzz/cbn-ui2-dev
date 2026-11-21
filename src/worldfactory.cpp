@@ -457,13 +457,16 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool hit_world_row = false;
             for( const auto &rect : world_rects ) {
                 if( rect.first.contains( cell ) ) {
                     sel = rect.second;
+                    hit_world_row = true;
                     break;
                 }
             }
-            if( action == "SELECT" ) {
+            // Only a click that landed on a world row may enter that world.
+            if( action == "SELECT" && hit_world_row ) {
                 action = "CONFIRM";
             }
         }
