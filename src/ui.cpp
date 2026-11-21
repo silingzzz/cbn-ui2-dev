@@ -233,6 +233,9 @@ input_context uilist::create_main_input_context() const
         ctxt.register_action( "QUIT" );
     }
     ctxt.register_action( "SELECT" );
+    // Hover tracking for mouse clicks. Without it a click only confirms whatever
+    // is currently highlighted, which is not what clicking a visible row means.
+    ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "ANY_INPUT" );
@@ -854,6 +857,13 @@ void uilist::show( ui_adaptor &ui )
                 hk_co = entries[ei].enabled ? hotkey_color : co;
             }
 
+            // Mouse support: remember where this entry was drawn so the input
+            // loop can hit test it. Coordinates are screen cells (same space as
+            // input_event::mouse_pos).
+            entries[ei].drawn_rect = inclusive_rectangle<point>(
+                                         point( getbegx( window ) + pad_left, getbegy( window ) + estart + si ),
+                                         point( getbegx( window ) + w_width - 1, getbegy( window ) + estart + si ) );
+
             mvwprintz( window, point( pad_left + 1, estart + si ), co, padspaces );
             if( entries[ ei ].hotkey >= 33 && entries[ ei ].hotkey < 126 ) {
                 mvwprintz( window, point( pad_left + 2, estart + si ), hk_co,
@@ -1073,7 +1083,31 @@ void uilist::query( bool loop, int timeout )
         keypress = event.get_first_input();
         const auto iter = keymap.find( keypress );
 
-        if( scrollby( scroll_amount_from_action( ret_act ) ) ) {
+        if( ret_act == "MOUSE_MOVE" ) {
+            // Hover: highlight the entry under the cursor so a following click
+            // acts on the row the player is pointing at.
+            for( size_t i = 0; i < fentries.size(); ++i ) {
+                const auto &entry = entries[fentries[i]];
+                if( entry.drawn_rect && entry.drawn_rect->contains( event.mouse_pos ) ) {
+                    if( static_cast<int>( i ) != fselected ) {
+                        fselected = static_cast<int>( i );
+                        selected = fentries[i];
+                        if( callback != nullptr ) {
+                            callback->select( this );
+                        }
+                        ui_manager::redraw();
+                    }
+                    break;
+                }
+            }
+        } else if( ret_act == "SELECT" ) {
+            // Click: activate the hovered row, honouring the same enable rules
+            // as the keyboard path.
+            if( !fentries.empty() && selected >= 0 &&
+                ( entries[selected].enabled || allow_disabled ) ) {
+                ret = entries[selected].retval;
+            }
+        } else if( scrollby( scroll_amount_from_action( ret_act ) ) ) {
             /* nothing */
         } else if( filtering && ret_act == "FILTER" ) {
             inputfilter();

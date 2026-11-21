@@ -676,6 +676,9 @@ bool main_menu::opening_screen()
     ctxt.register_action( "PAGE_DOWN" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
+    // Mouse support: hover selects the button under the cursor, click activates it.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     // for the menu shortcuts
     ctxt.register_action( "ANY_INPUT" );
@@ -750,6 +753,24 @@ bool main_menu::opening_screen()
         }
 
         // also check special keys
+        if( action == "MOUSE_MOVE" ) {
+            for( const auto &entry : main_menu_button_map ) {
+                if( entry.first.contains( sInput.mouse_pos ) ) {
+                    if( sel1 != entry.second ) {
+                        sel1 = entry.second;
+                        on_move();
+                        ui_manager::redraw();
+                    }
+                    break;
+                }
+            }
+            continue;
+        }
+        if( action == "SELECT" ) {
+            // A click is a confirmation of whatever the cursor is over.
+            action = "CONFIRM";
+        }
+
         if( action == "QUIT" ) {
             ui_manager::redraw();
             if( query_yn( _( "Really quit?" ) ) ) {
