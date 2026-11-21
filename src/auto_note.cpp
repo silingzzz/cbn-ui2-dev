@@ -3,6 +3,7 @@
 #include "cata_utility.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -207,11 +208,18 @@ void auto_note_manager_gui::show()
     int currentLine = 0;
     int startPosition = 0;
     int endPosition = 0;
+    // Mouse hit areas of the map extra rows, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
 
     input_context ctx{ "AUTO_NOTES" };
     ctx.register_action( "QUIT" );
     ctx.register_action( "SWITCH_AUTO_NOTE_OPTION" );
     ctx.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a row to select it; clicking it also toggles it.
+    ctx.register_action( "MOUSE_MOVE" );
+    ctx.register_action( "SELECT" );
+    ctx.register_action( "SCROLL_UP" );
+    ctx.register_action( "SCROLL_DOWN" );
 
     if( !emptyMode ) {
         ctx.register_cardinal();
@@ -283,6 +291,7 @@ void auto_note_manager_gui::show()
         } else {
             calcStartPos( startPosition, currentLine, iContentHeight, displayCache.size() );
             endPosition = startPosition + ( iContentHeight > cacheSize ? cacheSize : iContentHeight );
+            row_hits.clear();
 
             for( int i = startPosition; i < endPosition; ++i ) {
                 const string_id<map_extra> &displayCacheEntry = displayCache[i];
@@ -312,6 +321,11 @@ void auto_note_manager_gui::show()
                 // displaying the current text. Otherwise artifacts might occur.
                 mvwprintz( w, point( 64, i - startPosition ), statusColor, "     " );
                 mvwprintz( w, point( 64, i - startPosition ), statusColor, "%s", statusString );
+                row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 1, getbegy( w ) + i - startPosition ),
+                        point( getbegx( w ) + getmaxx( w ) - 1, getbegy( w ) + i - startPosition ) ),
+                    i );
             }
         }
 
@@ -323,7 +337,35 @@ void auto_note_manager_gui::show()
     while( true ) {
         ui_manager::redraw();
 
-        const std::string currentAction = ctx.handle_input();
+        const std::string action_in = ctx.handle_input();
+        std::string currentAction = action_in;
+
+        if( currentAction == "MOUSE_MOVE" || currentAction == "SELECT" ) {
+            if( emptyMode ) {
+                continue;
+            }
+            // Mouse: select the row under the pointer; a click also toggles it.
+            const point cell = mouse_pixel_to_cell( ctx.get_raw_input().mouse_pos );
+            for( const auto &row_hit : row_hits ) {
+                if( !row_hit.first.contains( cell ) ) {
+                    continue;
+                }
+                currentLine = row_hit.second;
+                if( currentAction == "SELECT" ) {
+                    const string_id<map_extra> &hit_item = displayCache[currentLine];
+                    std::pair<const map_extra, bool> &hit_entry = mapExtraCache[hit_item];
+                    hit_entry.second = !hit_entry.second;
+                    wasChanged = true;
+                }
+                break;
+            }
+            continue;
+        }
+        if( currentAction == "SCROLL_UP" ) {
+            currentAction = "UP";
+        } else if( currentAction == "SCROLL_DOWN" ) {
+            currentAction = "DOWN";
+        }
 
         // Actions that also work with no items to display
         if( currentAction == "SWITCH_AUTO_NOTE_OPTION" ) {
