@@ -1370,6 +1370,16 @@ std::optional<construction_id> construction_menu( const bool blueprint )
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+                std::fprintf( stderr, "CON cell=(%d,%d) rects=%zu", cell.x, cell.y, construct_rects.size() );
+                if( !construct_rects.empty() ) {
+                    std::fprintf( stderr, " first=[%d,%d..%d,%d] idx=%d", construct_rects[0].first.p_min.x,
+                                  construct_rects[0].first.p_min.y, construct_rects[0].first.p_max.x,
+                                  construct_rects[0].first.p_max.y, construct_rects[0].second );
+                }
+                std::fprintf( stderr, " select=%d\n", select );
+                std::fflush( stderr );
+            }
             for( const auto &rect : construct_rects ) {
                 if( rect.first.contains( cell ) ) {
                     select = rect.second;
