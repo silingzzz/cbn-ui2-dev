@@ -16,9 +16,13 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
+#include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_interaction.h"
+#include "cata_imgui_ui2_style.h"
 #include "debug.h"
 #include "filesystem.h"
 #include "options.h"
+#include "output.h"
 #include "path_info.h"
 #include "translations.h"
 
@@ -325,6 +329,7 @@ void init( SDL_Window *window, SDL_Renderer *renderer )
     ImGuiIO &io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    ::ui2::style::apply();
     ImGui::StyleColorsDark();
 
     // Font atlas must exist before the renderer backend builds its texture.
