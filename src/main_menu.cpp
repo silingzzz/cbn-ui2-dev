@@ -756,20 +756,44 @@ bool main_menu::opening_screen()
         // also check special keys
         if( action == "MOUSE_MOVE" ) {
             const point cell = mouse_pixel_to_cell( sInput.mouse_pos );
-            for( const auto &entry : main_menu_button_map ) {
-                if( entry.first.contains( cell ) ) {
-                    if( sel1 != entry.second ) {
-                        sel1 = entry.second;
+            auto handled = false;
+            // Sub-menu first: it is drawn on top of the main button row.
+            for( const auto &entry : main_menu_sub_button_map ) {
+                if( entry.second.first == sel1 && entry.first.contains( cell ) ) {
+                    if( sel2 != entry.second.second ) {
+                        sel2 = entry.second.second;
                         on_move();
                         ui_manager::redraw();
                     }
+                    handled = true;
                     break;
+                }
+            }
+            if( !handled ) {
+                for( const auto &entry : main_menu_button_map ) {
+                    if( entry.first.contains( cell ) ) {
+                        if( sel1 != entry.second ) {
+                            sel1 = entry.second;
+                            sel2 = 0;
+                            on_move();
+                            ui_manager::redraw();
+                        }
+                        break;
+                    }
                 }
             }
             continue;
         }
         if( action == "SELECT" ) {
-            // A click is a confirmation of whatever the cursor is over.
+            // A click confirms whatever the cursor is over: pick the sub-menu
+            // entry if the pointer is on it, then fall through to CONFIRM.
+            const point cell = mouse_pixel_to_cell( sInput.mouse_pos );
+            for( const auto &entry : main_menu_sub_button_map ) {
+                if( entry.first.contains( cell ) ) {
+                    sel2 = entry.second.second;
+                    break;
+                }
+            }
             action = "CONFIRM";
         }
 
