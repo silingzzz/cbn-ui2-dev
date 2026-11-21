@@ -9581,6 +9581,9 @@ void game::zones_manager()
     ctxt.register_action( "MOVE_ZONE_DOWN" );
     ctxt.register_action( "SHOW_ZONE_ON_MAP" );
     ctxt.register_action( "ENABLE_ZONE" );
+    // Mouse: hover moves the zone cursor, click confirms the hovered zone.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "DISABLE_ZONE" );
     ctxt.register_action( "SHOW_ALL_ZONES" );
     ctxt.register_action( "TOGGLE_ZONE_OVERLAY" );
@@ -9590,6 +9593,8 @@ void game::zones_manager()
     auto &mgr = zone_manager::get_manager();
     int start_index = 0;
     int active_index = 0;
+    // Screen rectangles of the zone rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> zone_rects;
     bool stuff_changed = false;
     bool show_all_zones = false;
     int zone_cnt = 0;
@@ -9728,6 +9733,7 @@ void game::zones_manager()
         zones_manager_shortcuts( w_zones_info, g->show_zone_overlay,
                                  g->debug_submap_grid_overlay || zone_submap_grid_overlay );
 
+        zone_rects.clear();
         if( zone_cnt == 0 ) {
             werase( w_zones );
             mvwprintz( w_zones, point( 2, 5 ), c_white, _( "No Zones defined." ) );
@@ -9776,6 +9782,11 @@ void game::zones_manager()
                     //Draw Vehicle Indicator
                     mvwprintz( w_zones, point( 41, iNum - start_index ), colorLine,
                                zone.get_is_vehicle() ? "*" : "" );
+
+                    zone_rects.emplace_back(
+                        inclusive_rectangle<point>( point( getbegx( w_zones ), getbegy( w_zones ) + iNum - start_index ),
+                                                    point( getbegx( w_zones ) + width - 3, getbegy( w_zones ) + iNum - start_index ) ),
+                        iNum );
                 }
                 iNum++;
             }
@@ -9996,6 +10007,18 @@ void game::zones_manager()
 
         //Wait for input
         action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : zone_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    active_index = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
     } while( action != "QUIT" );
     zones_manager_open = false;
     ctxt.reset_timeout();
