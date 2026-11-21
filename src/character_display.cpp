@@ -1220,6 +1220,11 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
             if( !in_window( pane.border ) ) {
                 continue;
             }
+            // Switching panes is an explicit click; hovering with the pointer only
+            // moves the cursor inside the pane that is already current.
+            if( action == "MOUSE_MOVE" && curtab != pane.tab ) {
+                continue;
+            }
             if( curtab != pane.tab ) {
                 line = 0;
                 invalidate_tab( curtab );
