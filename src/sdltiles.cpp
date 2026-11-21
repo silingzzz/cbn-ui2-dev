@@ -178,9 +178,10 @@ auto mouse_pixel_to_cell( const point &pixel ) -> point
         int vw = 0;
         int vh = 0;
         SDL_GetWindowSize( ::window.get(), &vw, &vh );
-        RECT rc{};
         auto rw = 0;
         auto rh = 0;
+#if defined( _WIN32 )
+        RECT rc{};
         if( HWND h = static_cast<HWND>( SDL_GetPointerProperty(
                                             SDL_GetWindowProperties( ::window.get() ),
                                             SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr ) ) ) {
@@ -189,6 +190,7 @@ auto mouse_pixel_to_cell( const point &pixel ) -> point
                 rh = rc.bottom - rc.top;
             }
         }
+#endif
         std::fprintf( stderr,
                       "CELL px=(%d,%d) cell=(%d,%d) fn=(%d,%d) scale=%d virtwin=(%d,%d) realwin=(%d,%d) TERM=(%d,%d)\n",
                       pixel.x, pixel.y, cell_w, cell_h, fontwidth, fontheight, scaling_factor,
