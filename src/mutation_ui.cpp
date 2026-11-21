@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "character.h"
+#include "cursesport.h"
 #include "enums.h"
 #include "input.h"
 #include "inventory.h"
@@ -247,6 +248,9 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
+    // Mouse: hover/click selects a mutation row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 #if defined(__ANDROID__)
     for( const auto &p : passive ) {
         ctxt.register_manual_key( who.my_mutations[p].key, p.obj().name() );
@@ -258,8 +262,17 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
 
     std::optional<trait_id> examine_id;
 
+    // Mouse hit areas of the mutation rows, with the column and index they map to.
+    struct mutation_row_hit {
+        inclusive_rectangle<point> rect;
+        bool active_column;
+        int index;
+    };
+    std::vector<mutation_row_hit> mutation_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( wBio );
+        mutation_row_hits.clear();
         draw_border( wBio, BORDER_COLOR, _( " MUTATIONS " ) );
         // Draw line under title
         mvwhline( wBio, point( 1, HEADER_LINE_Y ), LINE_OXOX, WIDTH - 2 );
@@ -296,6 +309,12 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                     //~ Hint: Letter to show which mutation is Hidden in the mutation menu
                     wprintz( wBio, c_cyan, _( " H" ) );
                 }
+                mutation_row_hits.emplace_back( mutation_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( wBio ) + 2, getbegy( wBio ) + list_start_y + i - scroll_position ),
+                        point( getbegx( wBio ) + second_column - 1,
+                               getbegy( wBio ) + list_start_y + i - scroll_position ) ),
+                    false, i } );
             }
         }
 
@@ -342,6 +361,13 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                 }
                 mvwprintz( wBio, point( second_column + 2, list_start_y + i - scroll_position ),
                            type, mut_desc );
+                mutation_row_hits.emplace_back( mutation_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( wBio ) + second_column,
+                               getbegy( wBio ) + list_start_y + i - scroll_position ),
+                        point( getbegx( wBio ) + WIDTH - 2,
+                               getbegy( wBio ) + list_start_y + i - scroll_position ) ),
+                    true, i } );
             }
         }
 
@@ -365,6 +391,22 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
         bool handled = false;
         const std::string action = ctxt.handle_input();
         const input_event evt = ctxt.get_raw_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( evt.mouse_pos );
+            bool row_hit = false;
+            for( const mutation_row_hit &hit : mutation_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    tab_mode = hit.active_column ? mutation_tab_mode::active :
+                               mutation_tab_mode::passive;
+                    cursor = hit.index;
+                    row_hit = true;
+                    break;
+                }
+            }
+            if( row_hit || evt.type == input_event_t::mouse ) {
+                continue;
+            }
+        }
         if( evt.type == input_event_t::keyboard && !evt.sequence.empty() ) {
             const int ch = evt.get_first_input();
             if( ch == ' ' ) { //skip if space is pressed (space is used as an empty hotkey)
