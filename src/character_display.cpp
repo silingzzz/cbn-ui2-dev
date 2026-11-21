@@ -1288,11 +1288,21 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
                         break;
                     }
                     case player_display_tab::skills: {
-                        const int height = getmaxy( pane.content ) - 1;
-                        const std::pair<int, int> range = subindex_around_cursor(
-                                skillslist.size(), height, line, curtab == player_display_tab::skills );
-                        const size_t idx = static_cast<size_t>( range.first ) +
-                                           static_cast<size_t>( row );
+                        // Use the same first-row computation as the drawing code
+                        // above (bias/first row), otherwise clicks land one row off
+                        // after the list has been scrolled.
+                        const size_t height = static_cast<size_t>( std::max( 0,
+                                              getmaxy( pane.content ) - 1 ) );
+                        const size_t half_y = height > 0 ? ( height - 1 ) / 2 : 0;
+                        size_t min = 0;
+                        if( line > half_y ) {
+                            if( line >= skillslist.size() - half_y ) {
+                                min = skillslist.size() < height ? 0 : skillslist.size() - height;
+                            } else {
+                                min = line - half_y;
+                            }
+                        }
+                        const size_t idx = min + static_cast<size_t>( row );
                         // Header rows are captions, not selectable lines.
                         if( idx < skillslist.size() && !skillslist[idx].is_header ) {
                             line = static_cast<unsigned>( idx );
