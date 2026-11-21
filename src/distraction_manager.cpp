@@ -7,6 +7,7 @@
 #include "cata_utility.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "input.h"
 #include "json.h"
 #include "output.h"
@@ -96,12 +97,17 @@ void distraction_manager_gui::show()
     int currentLine = 0;
     int startPosition = 0;
     distraction_type cur_distraction = distractions_status[currentLine];
+    // Mouse hit areas of the distraction rows, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
 
     input_context ctx{ "DISTRACTION_MANAGER" };
     ctx.register_cardinal();
     ctx.register_action( "QUIT" );
     ctx.register_action( "HELP_KEYBINDINGS" );
     ctx.register_action( "CONFIRM" );
+    // Mouse: click a row to select it; clicking it again toggles it.
+    ctx.register_action( "MOUSE_MOVE" );
+    ctx.register_action( "SELECT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         // Draw border
@@ -129,6 +135,7 @@ void distraction_manager_gui::show()
         wnoutrefresh( w_header );
 
         // Clear table
+        row_hits.clear();
         for( int y = 0; y < iContentHeight; y++ ) {
             for( int x = 0; x < 79; x++ ) {
                 if( x == 60 ) {
@@ -162,6 +169,11 @@ void distraction_manager_gui::show()
 
             // Print "Enabled/Disabled" text
             mvwprintz( w, point( 62, i - startPosition ), status_color, "%s", status_string );
+            row_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( w ) + 1, getbegy( w ) + i - startPosition ),
+                    point( getbegx( w ) + getmaxx( w ) - 1, getbegy( w ) + i - startPosition ) ),
+                i );
         }
 
         wnoutrefresh( w_header );
@@ -173,6 +185,23 @@ void distraction_manager_gui::show()
         ui_manager::redraw();
 
         const std::string currentAction = ctx.handle_input();
+
+        if( currentAction == "MOUSE_MOVE" || currentAction == "SELECT" ) {
+            // Mouse: select the row under the pointer; a click also toggles it.
+            const point cell = mouse_pixel_to_cell( ctx.get_raw_input().mouse_pos );
+            for( const auto &row_hit : row_hits ) {
+                if( !row_hit.first.contains( cell ) ) {
+                    continue;
+                }
+                currentLine = row_hit.second;
+                cur_distraction = distractions_status[currentLine];
+                if( currentAction == "SELECT" ) {
+                    distractions[cur_distraction] = !distractions[cur_distraction];
+                }
+                break;
+            }
+            continue;
+        }
 
         if( currentAction == "QUIT" ) {
             save();
