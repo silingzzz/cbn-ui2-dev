@@ -8,7 +8,9 @@
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "color.h"
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "input.h"
 #include "output.h"
 #include "point.h"
@@ -148,6 +150,8 @@ int lightson_game::start_game()
     ctxt.register_action( "RESET" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a cell to select and toggle it.
+    ctxt.register_action( "SELECT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         std::vector<std::string> shortcuts;
@@ -191,6 +195,22 @@ int lightson_game::start_game()
         }
         ui_manager::redraw();
         std::string action = ctxt.handle_input();
+        if( action == "SELECT" ) {
+            // Mouse: clicking a cell selects it and toggles it (plus neighbours).
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point board = cell - point( getbegx( w ), getbegy( w ) ) - point_south_east;
+            if( half_open_rectangle<point>( point_zero, level_size ).contains( board ) ) {
+                position = board;
+                toggle_lights();
+                win = check_win();
+                if( win ) {
+                    ui.invalidate_ui();
+                    popup_top( _( "Congratulations, you won!" ) );
+                    hasWon++;
+                }
+            }
+            continue;
+        }
         if( const std::optional<tripoint_rel_ms> vec = ctxt.get_direction( action ) ) {
             position.y = clamp( position.y + vec->y(), 0, level_size.y - 1 );
             position.x = clamp( position.x + vec->x(), 0, level_size.x - 1 );
