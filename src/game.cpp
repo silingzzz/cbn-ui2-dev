@@ -11335,8 +11335,14 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
     ctxt.register_action( "PRIORITY_DECREASE" );
     ctxt.register_action( "SORT" );
     ctxt.register_action( "TRAVEL_TO" );
+    // Mouse: hover/click selects the item row, clicking opens its info.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     std::optional<item_filter_type> filter_type;
+
+    // Mouse hit areas of the visible item rows, with the row index (iActive space).
+    std::vector<std::pair<inclusive_rectangle<point>, int>> vmenu_item_row_hits;
 
     ui.on_redraw( [&]( ui_adaptor & ui ) {
         reset_item_list_state( w_items_border, iInfoHeight, sort_radius );
@@ -11347,6 +11353,7 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
             mvwprintz( w_items, point( 2, 10 ), c_white, _( "You don't see any items around you!" ) );
         } else {
             werase( w_items );
+            vmenu_item_row_hits.clear();
             calcStartPos( iStartPos, iActive, iMaxRows, iItemNum );
             int iNum = 0;
             // ITEM LIST
@@ -11396,6 +11403,11 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
                 const int new_width = print_new ? item_new_str_width + 1 : 1;
                 trim_and_print( w_items, point( 1, iNum - iStartPos ),
                                 width_nob - padding - new_width, col, sText );
+                vmenu_item_row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w_items ) + 1, getbegy( w_items ) + iNum - iStartPos ),
+                        point( getbegx( w_items ) + width_nob - 1, getbegy( w_items ) + iNum - iStartPos ) ),
+                    iNum );
                 const auto p = iter->vIG[iThisPage].pos.xy();
                 if( print_new ) {
                     mvwprintz( w_items,
@@ -11463,8 +11475,40 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
             trail_end_x );
     add_draw_callback( trail_cb );
 
+    // Resolves the item under iActive; shared by the keyboard and mouse paths.
+    const auto update_active_item = [&]() {
+        active_pos = tripoint_rel_ms::zero();
+        activeItem = nullptr;
+
+        if( mSortCategory[iActive].empty() ) {
+            auto iter = filtered_items.begin();
+            for( int iNum = 0; iter != filtered_items.end() && iNum < iActive; iNum++ ) {
+                if( mSortCategory[iNum].empty() ) {
+                    ++iter;
+                }
+            }
+            if( iter != filtered_items.end() ) {
+                active_pos = iter->vIG[page_num].pos;
+                activeItem = &( *iter );
+            }
+        }
+    };
+
     do {
         bool recalc_unread = false;
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &hit : vmenu_item_row_hits ) {
+                if( hit.first.contains( cell ) ) {
+                    iActive = hit.second;
+                    update_active_item();
+                    if( action == "SELECT" ) {
+                        action = "EXAMINE";
+                    }
+                    break;
+                }
+            }
+        }
         if( action == "COMPARE" && activeItem ) {
             game_menus::inv::compare( u, active_pos );
             recalc_unread = highlight_unread_items;
@@ -11648,21 +11692,7 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
             return game::vmenu_ret::CHANGE_TAB;
         }
 
-        active_pos = tripoint_rel_ms::zero();
-        activeItem = nullptr;
-
-        if( mSortCategory[iActive].empty() ) {
-            auto iter = filtered_items.begin();
-            for( int iNum = 0; iter != filtered_items.end() && iNum < iActive; iNum++ ) {
-                if( mSortCategory[iNum].empty() ) {
-                    ++iter;
-                }
-            }
-            if( iter != filtered_items.end() ) {
-                active_pos = iter->vIG[page_num].pos;
-                activeItem = &( *iter );
-            }
-        }
+        update_active_item();
 
         if( activeItem ) {
             centerlistview( active_pos, width );
