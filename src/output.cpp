@@ -1403,6 +1403,15 @@ auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab
     return rects;
 }
 
+auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                const std::string &current_tab, int max_tab_width )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>
+{
+    const auto it = std::ranges::find( tab_texts, current_tab );
+    assert( it != tab_texts.end() );
+    return tab_rects( w, tab_texts, static_cast<size_t>( it - tab_texts.begin() ), max_tab_width );
+}
+
 void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab_texts,
                 const std::string &current_tab, int width )
 {

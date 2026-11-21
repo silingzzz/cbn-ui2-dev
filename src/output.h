@@ -777,6 +777,10 @@ void draw_tabs( const catacurses::window &, const std::vector<std::string> &tab_
 auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab_texts,
                 size_t current_tab, int max_tab_width = -1 )
     -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>;
+// As above, but specify the current tab by its label.
+auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                const std::string &current_tab, int max_tab_width = -1 )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>;
 
 // This overload of draw_tabs is intended for use when you track the current
 // tab via some other value (like an enum) linked to each tab.  Expected use

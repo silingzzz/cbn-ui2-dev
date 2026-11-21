@@ -74,6 +74,14 @@ std::vector<std::string> craft_cat_list;
 std::map<std::string, std::vector<std::string> > craft_subcat_list;
 std::map<std::string, std::string> normalized_names;
 
+namespace
+{
+/// Mouse hit areas of the crafting category tabs, mapped to craft_cat_list ids.
+std::vector<std::pair<inclusive_rectangle<point>, std::string>> craft_tab_hits;
+/// Mouse hit areas of the crafting sub-category tabs, mapped to subcat ids.
+std::vector<std::pair<inclusive_rectangle<point>, std::string>> craft_subtab_hits;
+} // namespace
+
 static bool query_is_yes( const std::string &query );
 static int draw_hidden_amount( const catacurses::window &w, int amount, int num_recipe );
 static void draw_can_craft_indicator( const catacurses::window &w, const recipe &rec,
@@ -1488,8 +1496,41 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         const int scroll_recipe_info_lines = catacurses::getmaxy( w_iteminfo ) - 4;
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
-            // Hit test the recipe list that was drawn last frame.
+            // Hit test the recipe list and the two tab bars that were drawn last frame.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            if( action == "SELECT" ) {
+                std::string clicked_tab;
+                for( const auto &hit : craft_tab_hits ) {
+                    if( hit.first.contains( cell ) ) {
+                        clicked_tab = hit.second;
+                        break;
+                    }
+                }
+                if( !clicked_tab.empty() ) {
+                    for( size_t i = 0; i < craft_cat_list.size() && tab.cur() != clicked_tab; ++i ) {
+                        tab.next();
+                    }
+                    // Default ALL
+                    subtab = list_circularizer<std::string>( craft_subcat_list[tab.cur()] );
+                    recalc = true;
+                    continue;
+                }
+                std::string clicked_subtab;
+                for( const auto &hit : craft_subtab_hits ) {
+                    if( hit.first.contains( cell ) ) {
+                        clicked_subtab = hit.second;
+                        break;
+                    }
+                }
+                if( !clicked_subtab.empty() ) {
+                    const std::vector<std::string> &subcats = craft_subcat_list[tab.cur()];
+                    for( size_t i = 0; i < subcats.size() && subtab.cur() != clicked_subtab; ++i ) {
+                        subtab.next();
+                    }
+                    recalc = true;
+                    continue;
+                }
+            }
             const point rel = cell - drawn_origin;
             if( drawn_rows > 0 && rel.y >= 0 && rel.y < drawn_rows &&
                 rel.x >= 0 && rel.x < drawn_width ) {
@@ -2086,6 +2127,10 @@ static void draw_recipe_tabs( const catacurses::window &w, const std::string &ta
             }
 
             draw_tabs( w, tabs, real_tab, width_for_tabs );
+            craft_tab_hits.clear();
+            for( const auto &tab_rect : tab_rects( w, tabs, real_tab, width_for_tabs ) ) {
+                craft_tab_hits.emplace_back( tab_rect.first, craft_cat_list[tab_rect.second] );
+            }
             break;
         }
         case FILTERED: {
@@ -2116,6 +2161,7 @@ static void draw_recipe_subtabs( const catacurses::window &w, const std::string 
                                  std::map<std::string, bool> &unread )
 {
     werase( w );
+    craft_subtab_hits.clear();
     int width = getmaxx( w );
     for( int i = 0; i < width; i++ ) {
         if( i == 0 ) {
@@ -2142,6 +2188,11 @@ static void draw_recipe_subtabs( const catacurses::window &w, const std::string 
                 bool empty = available_recipes.empty_category( tab, stt != "CSC_ALL" ? stt : "" );
                 const std::string subtab_name = normalized_names[stt];
                 draw_subtab( w, pos_x, subtab_name, subtab == stt, true, empty );
+                craft_subtab_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + pos_x, getbegy( w ) ),
+                        point( getbegx( w ) + pos_x + utf8_width( subtab_name ) + 1, getbegy( w ) + 1 ) ),
+                    stt );
                 pos_x += utf8_width( subtab_name ) + tab_step;
                 if( unread[stt] ) {
                     mvwprintz( w, point( pos_x - 2, 0 ), c_light_green, "⁺" );
