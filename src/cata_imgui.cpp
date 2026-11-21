@@ -74,6 +74,9 @@ struct trace_counters {
 };
 
 trace_counters g_trace;
+// Last observed window pixel size, for DPI diagnostics.
+static int g_dpi_win_w = 0;
+static int g_dpi_win_h = 0;
 
 auto trace_on() -> bool
 {
@@ -169,12 +172,12 @@ void trace_maybe_log()
         std::fprintf( f,
                       "IMGUI_TRACE t=%llu ev=%llu mot=%llu down=%llu up=%llu wheel=%llu f10=%llu tog=%llu proc=%llu "
                       "frames=%llu rend=%llu pres=%llu btn=%llu hover=%llu gapMax=%llu gapN=%llu lagMs=%.1f "
-                      "open=%d mouse=(%.0f,%.0f) wantMouse=%d wantKb=%d gmove=%llu gclick=%llu gwheel=%llu gkey=%llu kui=%llu\n",
+                      "open=%d mouse=(%.0f,%.0f) wantMouse=%d wantKb=%d pxW=%d pxH=%d gmove=%llu gclick=%llu gwheel=%llu gkey=%llu kui=%llu\n",
                       static_cast<unsigned long long>( now ), g_trace.events, g_trace.motion, g_trace.mouse_down,
                       g_trace.mouse_up, g_trace.wheel, g_trace.f10_keydown, g_trace.toggles, g_trace.process_calls,
                       g_trace.frames, g_trace.renders, g_trace.presents, g_trace.btn_clicks, g_trace.btn_hover,
                       static_cast<unsigned long long>( g_trace.frame_gap_max_ms ), g_trace.frame_gap_n, lag,
-                      g_open ? 1 : 0, mx, my, want_mouse, want_kb,
+                      g_open ? 1 : 0, mx, my, want_mouse, want_kb, g_dpi_win_w, g_dpi_win_h,
                       g_trace.game_mouse[0], g_trace.game_mouse[1], g_trace.game_mouse[2],
                       g_trace.game_mouse[3], g_trace.key_ui );
         std::fclose( f );
@@ -391,12 +394,13 @@ auto process_event( const SDL_Event &event ) -> bool
                           event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                           event.type == SDL_EVENT_MOUSE_BUTTON_UP ||
                           event.type == SDL_EVENT_MOUSE_WHEEL;
+    // Always translate: SDL's window coordinate space is not the renderer's
+    // coordinate space. They differ under SCALING_FACTOR logical presentation
+    // *and* under a non-100% display scale, where SDL reports window coords
+    // scaled relative to the render output (observed 1.25x at 125% DPI).
+    // SDL_RenderCoordinatesFromWindow is the supported conversion for both.
     if( is_mouse && g_renderer != nullptr ) {
-        int lw = 0;
-        int lh = 0;
-        SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
-        if( SDL_GetRenderLogicalPresentation( g_renderer, &lw, &lh, &mode ) &&
-            mode != SDL_LOGICAL_PRESENTATION_DISABLED ) {
+        {
             float wx = 0.0f;
             float wy = 0.0f;
             if( event.type == SDL_EVENT_MOUSE_WHEEL ) {
@@ -412,6 +416,17 @@ auto process_event( const SDL_Event &event ) -> bool
             float rx = 0.0f;
             float ry = 0.0f;
             if( SDL_RenderCoordinatesFromWindow( g_renderer, wx, wy, &rx, &ry ) ) {
+
+                // Record the pixel size for diagnostics. NOTE: under DPI
+                // virtualisation SDL reports the same virtualised size for both
+                // window and pixels (e.g. 2560x1344 for a ~2048px client), so the
+                // true scale CANNOT be derived here -- the process has to declare
+                // DPI awareness before SDL_Init for coordinates to line up.
+                int win_w = 0;
+                int win_h = 0;
+                SDL_GetWindowSizeInPixels( g_window, &win_w, &win_h );
+                g_dpi_win_w = win_w;
+                g_dpi_win_h = win_h;
                 converted = event;
                 if( event.type == SDL_EVENT_MOUSE_WHEEL ) {
                     converted.wheel.mouse_x = rx;
