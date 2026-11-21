@@ -1797,6 +1797,9 @@ void game_menus::inv::compare( const item &l, const item &r )
     ctxt.register_action( "DOWN" );
     ctxt.register_action( "PAGE_UP" );
     ctxt.register_action( "PAGE_DOWN" );
+    // Mouse: the wheel scrolls both item info panes.
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     std::vector<iteminfo> lhs_info = l.info();
     std::vector<iteminfo> rhs_info = r.info();
@@ -1836,10 +1839,10 @@ void game_menus::inv::compare( const item &l, const item &r )
 
         action = ctxt.handle_input();
 
-        if( action == "UP" || action == "PAGE_UP" ) {
+        if( action == "UP" || action == "PAGE_UP" || action == "SCROLL_UP" ) {
             lhs_scroll_pos--;
             rhs_scroll_pos--;
-        } else if( action == "DOWN" || action == "PAGE_DOWN" ) {
+        } else if( action == "DOWN" || action == "PAGE_DOWN" || action == "SCROLL_DOWN" ) {
             lhs_scroll_pos++;
             rhs_scroll_pos++;
         }
