@@ -16,6 +16,7 @@
 #include "character_oracle.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "effect.h"
 #include "fstream_utils.h"
@@ -2850,6 +2851,13 @@ void panel_manager::show_adm()
     ctxt.register_action( "RIGHT" );
     ctxt.register_action( "MOVE_PANEL" );
     ctxt.register_action( "TOGGLE_PANEL" );
+    // Mouse: click a panel row or a layout name to move the cursor there.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+
+    // Mouse hit areas recorded while drawing: panel rows (col 0) and layout names (col 2).
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> panel_row_hits;
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> layout_row_hits;
 
     const std::vector<int> column_widths = { 17, 37, 17 };
 
@@ -2888,6 +2896,8 @@ void panel_manager::show_adm()
 
         werase( w );
         decorate_panel( _( "SIDEBAR OPTIONS" ), w );
+        panel_row_hits.clear();
+        layout_row_hits.clear();
 
         for( std::pair<size_t, size_t> row_indx : row_indices ) {
             std::string name = _( panels[row_indx.second].get_name() );
@@ -2906,12 +2916,25 @@ void panel_manager::show_adm()
                 }
                 const nc_color toggle_color = panels[row_indx.second].toggle ? c_white : c_dark_gray;
                 mvwprintz( w, point( 4, row_indx.first + 1 + offset ), toggle_color, name );
+                panel_row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 3, getbegy( w ) + row_indx.first + 1 + offset ),
+                        point( getbegx( w ) + 4 + utf8_width( name ),
+                               getbegy( w ) + row_indx.first + 1 + offset ) ),
+                    row_indx.first );
             }
         }
         size_t i = 1;
         for( const auto &layout : layouts ) {
-            mvwprintz( w, point( column_widths[0] + column_widths[1] + 4, i ),
+            const int layout_x = column_widths[0] + column_widths[1] + 4;
+            mvwprintz( w, point( layout_x, i ),
                        current_layout_id == layout.first ? c_light_blue : c_white, _( layout.first ) );
+            layout_row_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( w ) + layout_x, getbegy( w ) + i ),
+                    point( getbegx( w ) + layout_x + utf8_width( _( layout.first ) ),
+                           getbegy( w ) + i ) ),
+                static_cast<size_t>( i - 1 ) );
             i++;
         }
         int col_offset = 0;
@@ -2959,6 +2982,28 @@ void panel_manager::show_adm()
         ui_manager::redraw();
 
         const std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool hit = false;
+            for( const auto &row_hit : panel_row_hits ) {
+                if( row_hit.first.contains( cell ) ) {
+                    current_col = 0;
+                    current_row = row_hit.second;
+                    hit = true;
+                    break;
+                }
+            }
+            if( !hit ) {
+                for( const auto &row_hit : layout_row_hits ) {
+                    if( row_hit.first.contains( cell ) ) {
+                        current_col = 2;
+                        current_row = row_hit.second;
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
         if( action == "UP" ) {
             if( current_row > 0 ) {
                 current_row -= 1;
