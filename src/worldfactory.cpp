@@ -37,6 +37,14 @@
 #include "ui_manager.h"
 #include "name.h"
 
+namespace
+{
+/// Screen rectangles of the world setup tab bar (World Mods/Options/Finalize) drawn last frame.
+std::vector<std::pair<inclusive_rectangle<point>, size_t>> worldgen_tab_rects;
+/// Tab requested by a click on that bar, applied by make_new_world().
+int requested_worldgen_tab = -1;
+} // namespace
+
 using namespace std::placeholders;
 
 // single instance of world generator
@@ -111,6 +119,11 @@ WORLDINFO *worldfactory::make_new_world( bool show_prompt, const std::string &wo
             curtab += tabs[curtab]( wf_win, retworld.get(), []() -> bool {
                 return query_yn( _( "Do you want to abort World Generation?" ) );
             } );
+            const int requested_tab = take_requested_worldgen_tab();
+            if( requested_tab >= 0 && curtab >= 0 &&
+                static_cast<size_t>( requested_tab ) < numtabs ) {
+                curtab = requested_tab;
+            }
         }
         if( curtab < 0 ) {
             return nullptr;
@@ -1110,7 +1123,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
             if( num_lines > window_height ) {
                 // The description didn't fit in the window, so provide a
                 // hint for how to see the whole thing
-                std::string message = string_format( _( "…%s = View full description " ),
+                std::string message = string_format( _( "闂?s = View full description " ),
                                                      ctxt.get_desc( "VIEW_MOD_DESCRIPTION" ) );
                 nc_color color = c_green;
                 print_colored_text( w_description, point( window_width - utf8_width( message ), window_height - 1 ),
@@ -1216,6 +1229,9 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
 
         std::string action = ctxt.handle_input();
+        if( action == "SELECT" && !standalone && worldfactory::worldgen_tab_clicked( ctxt ) ) {
+            return 0;
+        }
 
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
@@ -1429,6 +1445,9 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
     input_context ctxt( "WORLDGEN_CONFIRM_DIALOG" );
     // dialog actions
     ctxt.register_action( "QUIT" );
+    // Mouse: click the world setup tab bar to jump to another tab.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "PICK_RANDOM_WORLDNAME" );
@@ -1520,6 +1539,10 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
 
         worldname = spopup.query_string( false, false, true );
         const std::string action = ctxt.input_to_action( ctxt.get_raw_input() );
+        if( action == "SELECT" && worldfactory::worldgen_tab_clicked( ctxt ) ) {
+            world->world_name = worldname;
+            return 0;
+        }
         if( action == "NEXT_TAB" ) {
             if( worldname.empty() ) {
                 noname = true;
@@ -1649,7 +1672,27 @@ void worldfactory::draw_worldgen_tabs( const catacurses::window &w, size_t curre
                            []( std::string & str )->void { str = _( str ); } );
 
     draw_tabs( w, tab_strings_translated, current );
+    worldgen_tab_rects = tab_rects( w, tab_strings_translated, current );
     draw_border_below_tabs( w );
+}
+
+auto worldfactory::worldgen_tab_clicked( input_context &ctxt ) -> bool
+{
+    const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+    for( const auto &rect : worldgen_tab_rects ) {
+        if( rect.first.contains( cell ) ) {
+            requested_worldgen_tab = static_cast<int>( rect.second );
+            return true;
+        }
+    }
+    return false;
+}
+
+auto worldfactory::take_requested_worldgen_tab() -> int
+{
+    const int requested = requested_worldgen_tab;
+    requested_worldgen_tab = -1;
+    return requested;
 }
 
 void worldfactory::draw_empty_worldgen_tabs( const catacurses::window &w )

@@ -86,6 +86,11 @@ class worldfactory
         void delete_world( const std::string &worldname, bool delete_folder );
 
         static void draw_worldgen_tabs( const catacurses::window &w, size_t current );
+        /// True if the pending mouse input clicks the world setup tab bar, in which
+        /// case the requested tab is remembered for take_requested_worldgen_tab().
+        static auto worldgen_tab_clicked( input_context &ctxt ) -> bool;
+        /// Tab index requested by the last worldgen tab click, or -1 when none.
+        static auto take_requested_worldgen_tab() -> int;
         void show_active_world_mods( const std::vector<mod_id> &world_mods );
         void edit_active_world_mods( WORLDINFO *world );
 

@@ -4053,6 +4053,12 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         std::string action = ctxt.handle_input();
 
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // A click on the world setup tab bar (only shown for world options)
+            // leaves this screen and lets worldfactory jump to the clicked tab.
+            if( world_options_only && action == "SELECT" &&
+                worldfactory::worldgen_tab_clicked( ctxt ) ) {
+                return "MOUSE_WORLDGEN_TAB";
+            }
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             const point rel = cell - opt_drawn_origin;
             if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
