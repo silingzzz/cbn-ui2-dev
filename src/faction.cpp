@@ -1,4 +1,5 @@
 #include "faction.h"
+#include "cursesport.h"
 
 #include "avatar.h"
 #include "bionics.h"
@@ -638,6 +639,8 @@ void faction_manager::display() const
     g->validate_npc_followers();
     tab_mode tab = tab_mode::FIRST_TAB;
     size_t selection = 0;
+    // Screen rectangles of the rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> faction_rects;
     input_context ctxt( "FACTION MANAGER" );
     ctxt.register_cardinal();
     ctxt.register_updown();
@@ -647,6 +650,9 @@ void faction_manager::display() const
     ctxt.register_action( "SWAPTONPC" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
+    // Mouse: hover moves the list cursor, click confirms the hovered row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     std::vector<npc *> followers;
@@ -664,6 +670,13 @@ void faction_manager::display() const
     mtype_id cur_creature = mtype_id::NULL_ID();
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        faction_rects.clear();
+        const auto record_row = [&]( int y, size_t index ) {
+            faction_rects.emplace_back(
+            inclusive_rectangle<point>( point( getbegx( w_missions ) + 1, getbegy( w_missions ) + y ),
+                                        point( getbegx( w_missions ) + 28, getbegy( w_missions ) + y ) ), index );
+        };
+        ( void )record_row;
         werase( w_missions );
 
         for( int i = 3; i < FULL_SCREEN_HEIGHT - 1; i++ ) {
@@ -697,6 +710,7 @@ void faction_manager::display() const
                         const int y = i - top_of_page + 3;
                         trim_and_print( w_missions, point( 1, y ), 28, selection == i ? hilite( col ) : col,
                                         followers[i]->disp_name() );
+                        record_row( y, i );
                     }
                     if( guy ) {
                         int retval = guy->faction_display( w_missions, 31 );
@@ -723,6 +737,7 @@ void faction_manager::display() const
                         const int y = i - top_of_page + 3;
                         trim_and_print( w_missions, point( 1, y ), 28, selection == i ? hilite( col ) : col,
                                         _( valfac[i]->name ) );
+                        record_row( y, i );
                     }
                     if( cur_fac ) {
                         cur_fac->faction_display( w_missions, 31 );
@@ -744,6 +759,7 @@ void faction_manager::display() const
                         const int y = i - top_of_page + 3;
                         trim_and_print( w_missions, point( 1, y ), 28, selection == i ? hilite( col ) : col,
                                         _( lore[i].second ) );
+                        record_row( y, i );
                     }
                     if( snippet != nullptr ) {
                         int y = 2;
@@ -771,6 +787,7 @@ void faction_manager::display() const
                                         string_format( "%s  %s", colorize( creatures[i]->sym,
                                                        selection == i ? hilite( creatures[i]->color ) : creatures[i]->color ),
                                                        creatures[i]->nname() ) );
+                        record_row( y, i );
                     }
                     if( !cur_creature.is_null() ) {
                         cur_creature->faction_display( w_missions, point( 31, 3 ), w );
@@ -869,7 +886,19 @@ void faction_manager::display() const
         }
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : faction_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    selection = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         if( action == "NEXT_TAB" || action == "RIGHT" ) {
             tab = static_cast<tab_mode>( static_cast<int>( tab ) + 1 );
             if( tab >= tab_mode::NUM_TABS ) {

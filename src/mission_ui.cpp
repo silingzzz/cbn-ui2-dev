@@ -8,6 +8,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "color.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "input.h"
 #include "mission.h"
@@ -38,7 +39,13 @@ void game::list_missions()
     ctxt.register_cardinal();
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
+    // Mouse: hover moves the mission cursor, click selects the hovered mission.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+
+    // Screen rectangles of the mission rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> mission_rects;
 
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
@@ -54,6 +61,7 @@ void game::list_missions()
     std::vector<mission *> umissions;
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        mission_rects.clear();
         werase( w_missions );
         // entries_per_page * page number
         const int top_of_page = entries_per_page * ( selection / entries_per_page );
@@ -85,6 +93,11 @@ void game::list_missions()
             trim_and_print( w_missions, point( 1, y ), 28,
                             static_cast<int>( selection ) == i ? hilite( col ) : col,
                             miss->name() );
+
+            mission_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( w_missions ) + 1, getbegy( w_missions ) + y ),
+                                            point( getbegx( w_missions ) + 28, getbegy( w_missions ) + y ) ),
+                static_cast<size_t>( i ) );
         }
 
         if( selection < umissions.size() ) {
@@ -183,7 +196,19 @@ void game::list_missions()
             selection = 0;
         }
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : mission_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    selection = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         if( action == "RIGHT" ) {
             tab = static_cast<tab_mode>( static_cast<int>( tab ) + 1 );
             if( tab >= tab_mode::NUM_TABS ) {
