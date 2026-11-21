@@ -792,15 +792,12 @@ void inventory_column::on_input( const inventory_input &input )
 
 auto inventory_column::row_at( const point &cell ) const -> int
 {
-    if( !visible() || last_drawn_rows <= 0 ) {
-        return -1;
+    for( const auto &rect : entry_rects ) {
+        if( rect.first.contains( cell ) ) {
+            return static_cast<int>( rect.second );
+        }
     }
-    const point rel = cell - last_drawn_at;
-    if( rel.x < 0 || rel.x >= last_drawn_size.x || rel.y < 0 || rel.y >= last_drawn_rows ) {
-        return -1;
-    }
-    const size_t index = page_offset + static_cast<size_t>( rel.y );
-    return index < entries.size() ? static_cast<int>( index ) : -1;
+    return -1;
 }
 
 void inventory_column::add_entry( const inventory_entry &entry )
@@ -971,11 +968,8 @@ int inventory_column::reassign_custom_invlets( const player &p, int min_invlet, 
 
 void inventory_column::draw( const catacurses::window &win, point pos ) const
 {
-    last_drawn_at = point( getbegx( win ) + pos.x, getbegy( win ) + pos.y );
-    last_drawn_size = point( static_cast<int>( get_width() ),
-                             static_cast<int>( entries_per_page ) );
-    last_drawn_rows = static_cast<int>( std::min( entries_per_page,
-                        entries.size() > page_offset ? entries.size() - page_offset : 0 ) );
+    entry_rects.clear();
+    const point screen_origin( getbegx( win ) + pos.x, getbegy( win ) + pos.y );
 
     if( !visible() ) {
         return;
@@ -1003,6 +997,13 @@ void inventory_column::draw( const catacurses::window &win, point pos ) const
         int yy = pos.y + line;
 
         const bool selected = active && is_selected( entry );
+
+        // Record the exact screen row of this entry for mouse hit testing.
+        entry_rects.emplace_back(
+            inclusive_rectangle<point>( screen_origin + point( 0, static_cast<int>( line ) ),
+                                        screen_origin + point( static_cast<int>( get_width() ) - 1,
+                                                static_cast<int>( line ) ) ),
+            index );
 
         if( selected && visible_cells() > 1 ) {
             for( int hx = x1, hx_max = pos.x + get_width(); hx < hx_max; ++hx ) {
@@ -2033,6 +2034,19 @@ inventory_input inventory_selector::get_input()
 
     if( res.action == "MOUSE_MOVE" || res.action == "SELECT" ) {
         const point cell = mouse_pixel_to_cell( raw_input.mouse_pos );
+        if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+            std::fprintf( stderr, "INV mouse=(%d,%d) cell=(%d,%d)", raw_input.mouse_pos.x,
+                          raw_input.mouse_pos.y, cell.x, cell.y );
+            for( size_t i = 0; i < columns.size(); ++i ) {
+                const auto &rs = columns[i]->entry_rects;
+                if( !rs.empty() ) {
+                    std::fprintf( stderr, " col%zu first=[%d,%d..%d,%d]", i, rs[0].first.p_min.x,
+                                  rs[0].first.p_min.y, rs[0].first.p_max.x, rs[0].first.p_max.y );
+                }
+            }
+            std::fprintf( stderr, "\n" );
+            std::fflush( stderr );
+        }
         for( size_t i = 0; i < columns.size(); ++i ) {
             const auto row = columns[i]->row_at( cell );
             if( row < 0 ) {
@@ -2040,6 +2054,10 @@ inventory_input inventory_selector::get_input()
             }
             if( !is_active_column( *columns[i] ) ) {
                 set_active_column( i );
+            }
+            if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+                std::fprintf( stderr, "INV-HIT col=%zu row=%d\n", i, row );
+                std::fflush( stderr );
             }
             columns[i]->select( static_cast<size_t>( row ), scroll_direction::FORWARD );
             if( res.action == "SELECT" ) {

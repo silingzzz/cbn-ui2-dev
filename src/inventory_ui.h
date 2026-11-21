@@ -364,10 +364,10 @@ class inventory_column
 
         void set_filter( const std::string &filter );
 
-        // Geometry of the last draw, for mouse hit testing.
-        mutable point last_drawn_at = point_zero;
-        mutable point last_drawn_size = point_zero;
-        mutable int last_drawn_rows = 0;
+        // Screen rectangles of the entries drawn last frame, for mouse hit
+        // testing. Recording the rectangles is exact, unlike recomputing rows
+        // from a window origin and a row height.
+        mutable std::vector<std::pair<inclusive_rectangle<point>, size_t>> entry_rects;
 
         std::vector<inventory_entry> entries;
         std::vector<inventory_entry> entries_hidden;
