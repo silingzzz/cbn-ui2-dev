@@ -2910,8 +2910,17 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     const int remaining_points_length = utf8_width( points.to_string(), true );
 
+    // Mouse: skill rows, with the skill_list index they map to.
+    struct skill_row_hit {
+        inclusive_rectangle<point> rect;
+        int line;
+    };
+    std::vector<skill_row_hit> skill_row_hits;
+
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_character_tabs( w, _( "SKILLS" ), u.prof );
+        skill_row_hits.clear();
 
         draw_points( w, points );
         // Clear the bottom of the screen.
@@ -3040,6 +3049,11 @@ tab_direction set_skills( avatar &u, points_left &points )
                                ( i == cur_pos ? hilite( COL_SKILL_USED ) : COL_SKILL_USED ),
                                " (%d)", u.get_skill_level( thisSkill->ident(), true ) );
                 }
+                skill_row_hits.emplace_back( skill_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 4, getbegy( w ) + y ),
+                        point( getbegx( w ) + 4 + utf8_width( thisSkill->name() ), getbegy( w ) + y ) ),
+                    i } );
             }
             for( auto &prof_skill : u.prof->skills() ) {
                 if( prof_skill.first == thisSkill->ident() ) {
@@ -3059,9 +3073,19 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const skill_row_hit &hit : skill_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    cur_pos = hit.line;
+                    currentSkill = skill_list[cur_pos].first;
+                    break;
+                }
+            }
         }
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_skills );
@@ -3173,8 +3197,16 @@ tab_direction set_magic( avatar &u, points_left &points )
 
     const int remaining_points_length = utf8_width( points.to_string(), true );
 
+    // Mouse: spell rows, with the spell_list index they map to.
+    struct spell_row_hit {
+        inclusive_rectangle<point> rect;
+        int line;
+    };
+    std::vector<spell_row_hit> spell_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_character_tabs( w, _( "MAGIC" ), u.prof );
+        spell_row_hits.clear();
 
         draw_points( w, points );
         // Clear the bottom of the screen.
@@ -3251,6 +3283,11 @@ tab_direction set_magic( avatar &u, points_left &points )
                                ( i == cur_pos ? hilite( COL_SKILL_USED ) : COL_SKILL_USED ),
                                " (%d)", u.magic->get_spell( thisspell ).get_level() );
                 }
+                spell_row_hits.emplace_back( spell_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 4, getbegy( w ) + y ),
+                        point( getbegx( w ) + 4 + utf8_width( thisspell->name.translated() ), getbegy( w ) + y ) ),
+                    i } );
             }
         }
 
@@ -3263,9 +3300,19 @@ tab_direction set_magic( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const spell_row_hit &hit : spell_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    cur_pos = hit.line;
+                    current_spell = spell_list[cur_pos].first;
+                    break;
+                }
+            }
         }
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_spells );
