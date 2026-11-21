@@ -12,6 +12,7 @@
 #include "cata_utility.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
@@ -117,6 +118,12 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
     ctxt.register_action( "MOVE_RULE_DOWN" );
     ctxt.register_action( "TEST_RULE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a rule row (and a column) to move the cursor there; wheel scrolls.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
+    std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
 
     if( is_safemode_in ) {
         ctxt.register_action( "SWITCH_SAFEMODE_OPTION" );
@@ -191,6 +198,7 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
         wnoutrefresh( w_header );
 
         // Clear the lines
+        row_hits.clear();
         for( int i = 0; i < content_height; i++ ) {
             for( int j = 0; j < 79; j++ ) {
                 mvwputch( w, point( j, i ), c_black, ' ' );
@@ -228,6 +236,11 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
 
                 mvwprintz( w, point( 1, i - start_pos ), line_color, "%d", i + 1 );
                 mvwprintz( w, point( 5, i - start_pos ), c_yellow, ( line == i ) ? ">> " : "   " );
+                row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 1, getbegy( w ) + i - start_pos ),
+                        point( getbegx( w ) + getmaxx( w ) - 1, getbegy( w ) + i - start_pos ) ),
+                    i );
 
                 auto draw_column = [&]( Columns column_in, const std::string & text_in ) {
                     mvwprintz( w, point( column_pos[column_in] + 2, i - start_pos ),
@@ -255,7 +268,31 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
 
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input();
+        const std::string action_in = ctxt.handle_input();
+        std::string action = action_in;
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // Mouse: pick the rule row and the column under the pointer.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &row_hit : row_hits ) {
+                if( !row_hit.first.contains( cell ) ) {
+                    continue;
+                }
+                line = row_hit.second;
+                for( const auto &[col, pos] : column_pos ) {
+                    if( cell.x >= getbegx( w ) + pos + 2 ) {
+                        column = col;
+                    }
+                }
+                break;
+            }
+            continue;
+        }
+        if( action == "SCROLL_UP" ) {
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            action = "DOWN";
+        }
 
         if( action == "NEXT_TAB" ) {
             tab++;
