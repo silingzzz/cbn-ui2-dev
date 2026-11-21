@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "color.h"
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "diary.h"
 #include "input.h"
@@ -26,6 +28,9 @@ namespace
 {
 // maximum limit of the UIs width. After that, we center them, with an even space left and right
 const int MAX_DAIRY_UI_WIDTH = 150;
+
+/// When set, print_list_scrollable() records the visible row areas here for mouse hit-testing.
+std::vector<std::pair<inclusive_rectangle<point>, int>> *row_hit_sink = nullptr;
 
 /**print a scrollable list, printed std::vector<std::string> as list with scrollbar*/
 void print_list_scrollable( catacurses::window *win, std::vector<std::string> list, int *selection,
@@ -59,6 +64,14 @@ void print_list_scrollable( catacurses::window *win, std::vector<std::string> li
         }
         trim_and_print( *win, point( xoffset + 1, y + borderspace ), line_width,
                         line_color, line_str, color_error );
+        if( row_hit_sink ) {
+            row_hit_sink->emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( *win ) + xoffset + 1, getbegy( *win ) + y + borderspace ),
+                    point( getbegx( *win ) + xoffset + line_width,
+                           getbegy( *win ) + y + borderspace ) ),
+                i );
+        }
     }
     if( border ) {
         draw_border( *win );
@@ -189,6 +202,15 @@ void diary::show_diary_ui( diary *c_diary )
     ctxt.register_action( "DELETE PAGE" );
     ctxt.register_action( "EXPORT_DIARY" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a row in any pane to focus it and select that row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
+
+    std::vector<std::pair<inclusive_rectangle<point>, int>> page_row_hits;
+    std::vector<std::pair<inclusive_rectangle<point>, int>> change_row_hits;
+    std::vector<std::pair<inclusive_rectangle<point>, int>> text_row_hits;
 
     ui_adaptor ui_diary;
     ui_diary.on_screen_resize( [&]( ui_adaptor & ui ) {
@@ -218,10 +240,15 @@ void diary::show_diary_ui( diary *c_diary )
         std::vector<std::string> change_list = c_diary->get_change_list();
         left_diary_text.insert( left_diary_text.end(), change_list.begin(), change_list.end() );
 
+        change_row_hits.clear();
+        row_hit_sink = &change_row_hits;
         print_list_scrollable( &w_changes, left_diary_text, &selected[window_mode::CHANGE_WIN],
                                currwin == window_mode::CHANGE_WIN, false, report_color_error::yes );
+        text_row_hits.clear();
+        row_hit_sink = &text_row_hits;
         print_list_scrollable( &w_text, c_diary->get_page_text(), &selected[window_mode::TEXT_WIN],
                                currwin == window_mode::TEXT_WIN, false, report_color_error::no );
+        row_hit_sink = nullptr;
 
         wnoutrefresh( w_border );
         wnoutrefresh( w_changes );
@@ -244,8 +271,11 @@ void diary::show_diary_ui( diary *c_diary )
     ui_pages.on_redraw( [&]( const ui_adaptor & ) {
         werase( w_pages );
 
+        page_row_hits.clear();
+        row_hit_sink = &page_row_hits;
         print_list_scrollable( &w_pages, c_diary->get_pages_list(), &selected[window_mode::PAGE_WIN],
                                currwin == window_mode::PAGE_WIN, true, report_color_error::yes );
+        row_hit_sink = nullptr;
         center_print( w_pages, 0, c_light_gray, string_format( _( "pages: %d" ),
                       c_diary->get_pages_list().size() ) );
 
@@ -316,7 +346,35 @@ void diary::show_diary_ui( diary *c_diary )
         ui_desc.invalidate_ui();
         ui_info.invalidate_ui();
         ui_manager::redraw_invalidated();
-        const std::string action = ctxt.handle_input();
+        const std::string action_in = ctxt.handle_input();
+        std::string action = action_in;
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // Mouse: clicking a row focuses that pane and selects the row.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const auto hit_row = [&]( const std::vector<std::pair<inclusive_rectangle<point>, int>> &hits,
+                                      const window_mode mode ) -> bool {
+                for( const auto &[rect, index] : hits )
+                {
+                    if( rect.contains( cell ) )
+                    {
+                        currwin = mode;
+                        selected[mode] = index;
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if( !hit_row( page_row_hits, window_mode::PAGE_WIN )
+                && !hit_row( change_row_hits, window_mode::CHANGE_WIN ) ) {
+                hit_row( text_row_hits, window_mode::TEXT_WIN );
+            }
+            continue;
+        }
+        if( action == "SCROLL_UP" ) {
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            action = "DOWN";
+        }
         if( action == "RIGHT" ) {
             currwin = static_cast<window_mode>( static_cast<int>( currwin ) + 1 );
             if( currwin >= window_mode::NUM_WIN ) {
