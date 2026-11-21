@@ -570,10 +570,12 @@ int worldfactory::show_worldgen_tab_options( const catacurses::window &, WORLDIN
     return 0;
 }
 
-void worldfactory::draw_mod_list( const catacurses::window &w, int &start, size_t cursor,
+auto worldfactory::draw_mod_list( const catacurses::window &w, int &start, size_t cursor,
                                   const std::vector<mod_id> &mods, bool is_active_list,
-                                  const std::string &text_if_empty, const catacurses::window &w_shift )
+                                  const std::string &text_if_empty,
+                                  const catacurses::window &w_shift ) -> mod_list_hit_rects
 {
+    mod_list_hit_rects hit_rects;
     werase( w );
     werase( w_shift );
 
@@ -657,6 +659,13 @@ void worldfactory::draw_mod_list( const catacurses::window &w, int &start, size_
                     }
                     trim_and_print( w, point( 4, iNum - start ), wwidth, mod_entry_color, mod_entry_name );
 
+                    const size_t mod_index = std::distance( mods.begin(), iter );
+                    hit_rects.rows.emplace_back(
+                        inclusive_rectangle<point>( point( getbegx( w ) + 1, getbegy( w ) + iNum - start ),
+                                                    point( getbegx( w ) + getmaxx( w ) - 1,
+                                                            getbegy( w ) + iNum - start ) ),
+                        mod_index );
+
                     if( w_shift ) {
                         // get shift information for the active item
                         std::string shift_display;
@@ -675,6 +684,14 @@ void worldfactory::draw_mod_list( const catacurses::window &w, int &start, size_
                         }
 
                         trim_and_print( w_shift, point( 1, 2 + iNum - start ), 3, c_white, shift_display );
+
+                        const int shift_y = getbegy( w_shift ) + 2 + iNum - start;
+                        hit_rects.shift_up.emplace_back(
+                            inclusive_rectangle<point>( point( getbegx( w_shift ) + 1, shift_y ),
+                                                        point( getbegx( w_shift ) + 1, shift_y ) ), iPos );
+                        hit_rects.shift_down.emplace_back(
+                            inclusive_rectangle<point>( point( getbegx( w_shift ) + 3, shift_y ),
+                                                        point( getbegx( w_shift ) + 3, shift_y ) ), iPos );
                     }
                 }
             }
@@ -698,6 +715,7 @@ void worldfactory::draw_mod_list( const catacurses::window &w, int &start, size_
 
     wnoutrefresh( w );
     wnoutrefresh( w_shift );
+    return hit_rects;
 }
 
 void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods )
@@ -723,19 +741,24 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     int start = 0;
     int cursor = 0;
     const size_t num_mods = world_mods.size();
+    // Mouse hit areas recorded while drawing, consumed by the next input event.
+    mod_list_hit_rects list_hit_rects;
 
     input_context ctxt( "DEFAULT" );
     ctxt.register_updown();
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover selects the mod row, click closes the list like CONFIRM.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_border( w_border, BORDER_COLOR, _( " ACTIVE WORLD MODS " ) );
         wnoutrefresh( w_border );
 
-        draw_mod_list( w_mods, start, static_cast<size_t>( cursor ), world_mods,
-                       true, _( "--NO ACTIVE MODS--" ), catacurses::window() );
+        list_hit_rects = draw_mod_list( w_mods, start, static_cast<size_t>( cursor ), world_mods,
+                                        true, _( "--NO ACTIVE MODS--" ), catacurses::window() );
         wnoutrefresh( w_mods );
     } );
 
@@ -743,6 +766,19 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
         ui_manager::redraw();
 
         std::string action = ctxt.handle_input();
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : list_hit_rects.rows ) {
+                if( rect.first.contains( cell ) ) {
+                    cursor = static_cast<int>( rect.second );
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
+        }
 
         if( action == "UP" ) {
             cursor--;
@@ -838,6 +874,9 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
     ctxt.register_action( "VIEW_MOD_DESCRIPTION" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "TOGGLE_SHOW_OBSOLETE" );
+    // Mouse: hover moves the cursor, click activates the hovered mod or control.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     point filter_pos;
     int filter_view_len = 0;
@@ -897,6 +936,11 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
     int startsel[2] = {0, 0};
     size_t cursel[2] = {0, 0};
     size_t iCurrentTab = 0;
+    // Mouse hit areas recorded while drawing, consumed by the next input event.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> tab_hit_rects;
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> header_hit_rects;
+    mod_list_hit_rects list_hit_rects;
+    mod_list_hit_rects active_hit_rects;
 
     struct mod_tab {
         std::string id;
@@ -1034,6 +1078,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         draw_modselection_borders( win, ctxt, standalone );
 
         // Redraw headers
+        header_hit_rects.clear();
         for( size_t i = 0; i < headers.size(); ++i ) {
             werase( header_windows[i] );
             const int header_x = ( getmaxx( header_windows[i] ) - utf8_width( headers[i] ) ) / 2;
@@ -1045,6 +1090,11 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
                           c_red, '>' );
             }
             wnoutrefresh( header_windows[i] );
+
+            header_hit_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( header_windows[i] ), getbegy( header_windows[i] ) ),
+                                            point( getbegx( header_windows[i] ) + getmaxx( header_windows[i] ) - 1,
+                                                    getbegy( header_windows[i] ) ) ), i );
         }
 
         // Redraw description
@@ -1070,12 +1120,19 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
 
         // Draw tab names
         wmove( win, point( 2, 4 ) );
+        tab_hit_rects.clear();
+        int tab_x = 0;
         for( size_t i = 0; i < get_mod_list_tabs().size(); i++ ) {
+            const std::string tab_name = _( get_mod_list_tabs()[i].second );
             wprintz( win, c_white, "[" );
-            wprintz( win, ( iCurrentTab == i ) ? hilite( c_light_green ) : c_light_green,
-                     _( get_mod_list_tabs()[i].second ) );
+            wprintz( win, ( iCurrentTab == i ) ? hilite( c_light_green ) : c_light_green, tab_name );
             wprintz( win, c_white, "]" );
             wputch( win, BORDER_COLOR, LINE_OXOX );
+            tab_hit_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( win ) + 2 + tab_x, getbegy( win ) + 4 ),
+                                            point( getbegx( win ) + 3 + tab_x + utf8_width( tab_name ),
+                                                    getbegy( win ) + 4 ) ), i );
+            tab_x += utf8_width( tab_name ) + 3;
         }
 
         // Draw filter
@@ -1099,12 +1156,12 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         const mod_tab &current_tab = all_tabs[iCurrentTab];
         const char *msg = current_tab.mods_unfiltered.empty() ?
                           _( "--NO AVAILABLE MODS--" ) : _( "--NO MATCHES--" );
-        draw_mod_list( w_list, startsel[0], cursel[0], current_tab.mods, active_header == 0,
-                       msg, catacurses::window() );
+        list_hit_rects = draw_mod_list( w_list, startsel[0], cursel[0], current_tab.mods,
+                                        active_header == 0, msg, catacurses::window() );
 
         // Draw active mods
-        draw_mod_list( w_active, startsel[1], cursel[1], active_mod_order, active_header == 1,
-                       _( "--NO ACTIVE MODS--" ), w_shift );
+        active_hit_rects = draw_mod_list( w_active, startsel[1], cursel[1], active_mod_order,
+                                          active_header == 1, _( "--NO ACTIVE MODS--" ), w_shift );
     } );
 
     const auto set_filter = [&]() {
@@ -1159,6 +1216,75 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
         }
 
         std::string action = ctxt.handle_input();
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool hit_row = false;
+            bool hit_control = false;
+            for( const auto &rect : tab_hit_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    iCurrentTab = rect.second;
+                    startsel[0] = 0;
+                    cursel[0] = 0;
+                    hit_control = true;
+                    break;
+                }
+            }
+            if( !hit_control ) {
+                for( const auto &rect : header_hit_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        active_header = rect.second;
+                        hit_control = true;
+                        break;
+                    }
+                }
+            }
+            if( !hit_control && active_mod_order.size() > 1 ) {
+                for( const auto &rect : active_hit_rects.shift_up ) {
+                    if( rect.first.contains( cell ) ) {
+                        active_header = 1;
+                        cursel[1] = rect.second;
+                        mman_ui->try_shift( '+', cursel[1], active_mod_order );
+                        hit_control = true;
+                        break;
+                    }
+                }
+                if( !hit_control ) {
+                    for( const auto &rect : active_hit_rects.shift_down ) {
+                        if( rect.first.contains( cell ) ) {
+                            active_header = 1;
+                            cursel[1] = rect.second;
+                            mman_ui->try_shift( '-', cursel[1], active_mod_order );
+                            hit_control = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if( !hit_control ) {
+                for( const auto &rect : list_hit_rects.rows ) {
+                    if( rect.first.contains( cell ) ) {
+                        active_header = 0;
+                        cursel[0] = rect.second;
+                        hit_row = true;
+                        break;
+                    }
+                }
+            }
+            if( !hit_control && !hit_row ) {
+                for( const auto &rect : active_hit_rects.rows ) {
+                    if( rect.first.contains( cell ) ) {
+                        active_header = 1;
+                        cursel[1] = rect.second;
+                        hit_row = true;
+                        break;
+                    }
+                }
+            }
+            if( action == "SELECT" && hit_row ) {
+                action = "CONFIRM";
+            }
+        }
 
         if( action == "DOWN" ) {
             selection = next_selection;

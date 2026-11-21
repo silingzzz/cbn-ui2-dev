@@ -8,8 +8,10 @@
 #include <vector>
 #include <string>
 
+#include "cuboid_rectangle.h"
 #include "options.h"
 #include "pimpl.h"
+#include "point.h"
 #include "type_id.h"
 #include "world.h"
 
@@ -27,6 +29,16 @@ class window;
 class mod_manager;
 class mod_ui;
 class input_context;
+
+/// Mouse hit areas recorded while drawing one mod list.
+struct mod_list_hit_rects {
+    /// Row rectangle -> index into the drawn mod vector.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> rows;
+    /// Shift '+' button rectangle -> mod index (active list only).
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> shift_up;
+    /// Shift '-' button rectangle -> mod index (active list only).
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> shift_down;
+};
 
 class worldfactory
 {
@@ -99,9 +111,9 @@ class worldfactory
         void draw_modselection_borders( const catacurses::window &win, const input_context &ctxtp,
                                         bool standalone );
         static void draw_empty_worldgen_tabs( const catacurses::window &w );
-        void draw_mod_list( const catacurses::window &w, int &start, size_t cursor,
+        auto draw_mod_list( const catacurses::window &w, int &start, size_t cursor,
                             const std::vector<mod_id> &mods, bool is_active_list, const std::string &text_if_empty,
-                            const catacurses::window &w_shift );
+                            const catacurses::window &w_shift ) -> mod_list_hit_rects;
 
         WORLDINFO *add_world( std::unique_ptr<WORLDINFO> retworld );
 
