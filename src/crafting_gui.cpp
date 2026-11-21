@@ -1,4 +1,5 @@
 #include "crafting_gui.h"
+#include "cursesport.h"
 
 #include "avatar.h"
 #include "cached_options.h"
@@ -647,6 +648,9 @@ static input_context make_crafting_context( bool highlight_unread_recipes )
     ctxt.register_cardinal();
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "CONFIRM" );
+    // Mouse: hover moves the recipe cursor, click confirms the hovered recipe.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "SCROLL_RECIPE_INFO_UP" );
     ctxt.register_action( "SCROLL_RECIPE_INFO_DOWN" );
     ctxt.register_action( "PAGE_UP", to_translation( "Fast scroll up" ) );
@@ -858,6 +862,11 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
     std::vector<int> indent;
     std::vector<availability> available;
     int line = 0;
+    // Geometry of the last recipe list draw, for mouse hit testing.
+    int drawn_first_index = 0;
+    int drawn_rows = 0;
+    int drawn_width = 0;
+    point drawn_origin = point_zero;
     bool unread_recipes_first = false;
     bool user_moved_line = false;
     bool recalc = true;
@@ -965,6 +974,11 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
         // get subset to draw
         calcStartPos( recipe_scroll_window_min, line, dataLines, recmax );
         int recipe_scroll_window_max = std::min( recmax, recipe_scroll_window_min + dataLines );
+        // Remember where the list was drawn so mouse hit testing matches it.
+        drawn_first_index = recipe_scroll_window_min;
+        drawn_rows = recipe_scroll_window_max - recipe_scroll_window_min;
+        drawn_origin = point( getbegx( w_data ), getbegy( w_data ) );
+        drawn_width = width;
 
         for( int i = recipe_scroll_window_min; i < recipe_scroll_window_max; ++i ) {
             std::string tmp_name;
@@ -1472,7 +1486,25 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
 
         ui_manager::redraw();
         const int scroll_recipe_info_lines = catacurses::getmaxy( w_iteminfo ) - 4;
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // Hit test the recipe list that was drawn last frame.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point rel = cell - drawn_origin;
+            if( drawn_rows > 0 && rel.y >= 0 && rel.y < drawn_rows &&
+                rel.x >= 0 && rel.x < drawn_width ) {
+                const int index = drawn_first_index + rel.y;
+                if( index >= 0 && static_cast<size_t>( index ) < current.size() &&
+                    index != line ) {
+                    line = index;
+                    keepline = true;
+                    user_moved_line = true;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         if( action == "SCROLL_RECIPE_INFO_UP" ) {
             recipe_info_scroll -= dataLines;
             item_info_scroll -= dataLines;
