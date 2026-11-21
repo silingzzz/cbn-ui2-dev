@@ -1,4 +1,5 @@
 #include "construction.h"
+#include "cursesport.h"
 
 #include "action.h"
 #include "activity_actor_definitions.h"
@@ -456,6 +457,8 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     int tabindex = 0;
     int select = 0;
     int offset = 0;
+    // Screen rectangles of the construction rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> construct_rects;
     bool exit = false;
     construction_category_id category_id;
     std::vector<construction_group_str_id> constructs;
@@ -481,6 +484,9 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     ctxt.register_action( "TOGGLE_UNAVAILABLE_CONSTRUCTIONS" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "TOGGLE_FAVORITE" );
+    // Mouse: hover moves the construction cursor, click confirms the hovered row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "RESET_FILTER" );
@@ -910,6 +916,7 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     ui.mark_resize();
 
     ui.on_redraw( [&]( ui_adaptor & ui ) {
+        construct_rects.clear();
         draw_grid( w_con, w_list_width + w_list_x0 );
 
         // Erase existing tab selection & list of constructions
@@ -1029,6 +1036,10 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             const std::string group_name = is_favorite( group ) ? "* " + group->name() : group->name();
             const nc_color final_col = construction_color( group, highlight );
             trim_and_print( w_list, print_from, w_list_width, final_col, group_name );
+            construct_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( w_list ), getbegy( w_list ) + i ),
+                                            point( getbegx( w_list ) + w_list_width - 1, getbegy( w_list ) + i ) ),
+                current );
         }
 
         // Clear out lines for tools & materials
@@ -1356,7 +1367,19 @@ std::optional<construction_id> construction_menu( const bool blueprint )
 
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : construct_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    select = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         if( action == "FILTER" ) {
             struct filter_example {
                 char key;

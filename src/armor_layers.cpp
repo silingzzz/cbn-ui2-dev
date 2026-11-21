@@ -1,4 +1,5 @@
 #include "armor_layers.h"
+#include "cursesport.h"
 
 #include <algorithm>
 #include <array>
@@ -508,6 +509,9 @@ void show_armor_layers_ui( Character &who )
     catacurses::window w_sort_right;
     catacurses::window w_encumb;
 
+    // Screen rectangles of the worn item rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> armor_rects;
+
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
         win_h = std::min( TERMY, std::max( { FULL_SCREEN_HEIGHT, req_right_h, req_mid_h } ) );
@@ -594,6 +598,7 @@ void show_armor_layers_ui( Character &who )
             leftListOffset = leftListIndex + 1 - leftListLines;
         }
 
+        armor_rects.clear();
         // Left header
         mvwprintz( w_sort_left, point_zero, c_light_gray, _( "(Innermost)" ) );
         right_print( w_sort_left, 0, 0, c_light_gray, string_format( _( "Storage (%s)" ),
@@ -616,6 +621,10 @@ void show_armor_layers_ui( Character &who )
                             penalties.color_for_stacking_badness(), worn_armor_name );
             right_print( w_sort_left, drawindex + 1, 0, c_light_gray,
                          format_volume( ( *access_tmp_worn( itemindex ) )->get_storage() ) );
+            armor_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( w_sort_left ), getbegy( w_sort_left ) + drawindex + 1 ),
+                                            point( getbegx( w_sort_left ) + left_w - 1, getbegy( w_sort_left ) + drawindex + 1 ) ),
+                itemindex );
             if( ( *access_tmp_worn( itemindex ) )->has_flag( json_flag_HIDDEN ) ) {
                 //~ Hint: Letter to show which piece of armor is Hidden in the layering menu
                 mvwprintz( w_sort_left, point( offset_x - 1, drawindex + 1 ), c_cyan, _( "H" ) );
@@ -778,7 +787,19 @@ void show_armor_layers_ui( Character &who )
         leftListIndex = std::min( leftListIndex, new_index_upper_bound );
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : armor_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    leftListIndex = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         if( who.is_npc() && action == "ASSIGN_INVLETS" ) {
             // It doesn't make sense to assign invlets to NPC items
             continue;
