@@ -1,4 +1,5 @@
 #include "worldfactory.h"
+#include "cursesport.h"
 
 #include <algorithm>
 #include <array>
@@ -302,6 +303,8 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
 
     std::map<int, std::vector<std::string> > world_pages;
     size_t sel = 0, selpage = 0;
+    // Screen rectangles of the world rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> world_rects;
 
     catacurses::window w_worlds_border;
     catacurses::window w_worlds_tooltip;
@@ -378,6 +381,7 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
         }
 
         //Draw World Names
+        world_rects.clear();
         for( size_t i = 0; i < world_pages[selpage].size(); ++i ) {
             mvwprintz( w_worlds, point( 0, static_cast<int>( i ) ), c_white, "%d", i + 1 );
             wmove( w_worlds, point( 4, static_cast<int>( i ) ) );
@@ -396,6 +400,12 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
             }
 
             wprintz( w_worlds, col, text );
+
+            world_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( w_worlds ), getbegy( w_worlds ) + static_cast<int>( i ) ),
+                                            point( getbegx( w_worlds ) + iMinScreenWidth - 3,
+                                                    getbegy( w_worlds ) + static_cast<int>( i ) ) ),
+                i );
         }
 
         //Draw Tabs
@@ -431,7 +441,19 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
     while( true ) {
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : world_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    sel = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
 
         if( action == "QUIT" ) {
             break;
@@ -720,7 +742,7 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     while( true ) {
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
 
         if( action == "UP" ) {
             cursor--;
@@ -1136,7 +1158,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
                              prev_selection;
         }
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
 
         if( action == "DOWN" ) {
             selection = next_selection;
