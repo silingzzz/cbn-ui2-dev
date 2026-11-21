@@ -5,8 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
 #include "npctrade.h"
+#include "point.h"
 
 class item;
 class npc;
@@ -56,4 +58,12 @@ class trading_window
         bool filter_edit_theirs = false;
         bool show_item_info = false;
         std::unique_ptr<string_input_popup> filter_popup;
+
+        /// Mouse hit areas of the trade rows, recorded while drawing.
+        struct trade_row_hit {
+            inclusive_rectangle<point> rect;
+            bool theirs;
+            size_t index;
+        };
+        std::vector<trade_row_hit> trade_row_hits;
 };

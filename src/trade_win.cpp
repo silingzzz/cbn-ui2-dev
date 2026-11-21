@@ -13,6 +13,7 @@
 #include "avatar.h"
 #include "catacharset.h"
 #include "color.h"
+#include "cursesport.h"
 #include "game.h"
 #include "input.h"
 #include "ime.h"
@@ -143,6 +144,9 @@ auto register_trade_actions( input_context &ctxt, bool include_any_input ) -> vo
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover/click moves the trade cursor between rows and panes.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     if( include_any_input ) {
         ctxt.register_action( "ANY_INPUT" );
     }
@@ -178,6 +182,7 @@ auto trading_window::update_win( npc &np, const std::string &deal ) -> void
     // Draw borders, one of which is highlighted
     werase( w_them );
     werase( w_you );
+    trade_row_hits.clear();
 
     // Colors for hinting if the trade will be accepted or not.
     const auto trade_color = npc_trading::npc_will_accept_trade( state, np ) ? c_green : c_red;
@@ -546,6 +551,11 @@ auto trading_window::update_win( npc &np, const std::string &deal ) -> void
             const auto is_cursor = ( they && focus_them && i == them_cursor ) ||
                                    ( !they && !focus_them && i == you_cursor );
             const auto row_y = static_cast<int>( row + 1 + trade_total_header_rows );
+            trade_row_hits.emplace_back( trade_row_hit{
+                inclusive_rectangle<point>(
+                    point( getbegx( w_whose ) + 1, getbegy( w_whose ) + row_y ),
+                    point( getbegx( w_whose ) + win_w, getbegy( w_whose ) + row_y ) ),
+                they, i } );
             const auto &owner_sells = they ? ip.u_has : ip.npc_has;
             const auto &owner_sells_charge = they ? ip.u_charges : ip.npc_charges;
             auto itname = it->display_name();
@@ -1127,7 +1137,34 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
         }
         ui_manager::redraw();
 
-        const auto action = ctxt.handle_input();
+        auto action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // Clicking a row focuses its pane and moves the cursor there; clicking
+            // the already focused row again toggles that trade entry.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool focused_elsewhere = false;
+            for( const trade_row_hit &hit : trade_row_hits ) {
+                if( !hit.rect.contains( cell ) ) {
+                    continue;
+                }
+                const size_t current = hit.theirs ? them_cursor : you_cursor;
+                if( hit.theirs == focus_them && hit.index == current && action == "SELECT" ) {
+                    action = "CONFIRM";
+                } else {
+                    focus_them = hit.theirs;
+                    if( hit.theirs ) {
+                        them_cursor = hit.index;
+                    } else {
+                        you_cursor = hit.index;
+                    }
+                    focused_elsewhere = true;
+                }
+                break;
+            }
+            if( focused_elsewhere ) {
+                continue;
+            }
+        }
         if( action == "SWITCH_LISTS" ) {
             focus_them = !focus_them;
             if( category_mode ) {
