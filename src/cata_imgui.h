@@ -52,6 +52,15 @@ void forget_key_ownership();
 /// (Esc / Enter-commit semantics for forms).
 void clear_widget_focus();
 
+/// True when a game object exists, i.e. it is safe to read avatar data.
+/// Implemented in game.cpp because the game pointer lives there.
+auto ui2_game_ready() -> bool;
+
+/// Number of terminal columns the game layout must leave free on the right so
+/// the map + panel PoC can draw a real ImGui panel beside the real tiles map.
+/// Zero when the PoC is not enabled (CBN_UI2_POC).
+auto ui2_poc_columns() -> int;
+
 /// Diagnostic counter (only active with CBN_IMGUI_TRACE set): count presented frames.
 void trace_present();
 

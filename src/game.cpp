@@ -1,4 +1,5 @@
 #include "game.h"
+#include "cata_imgui.h"
 
 #include "achievement.h"
 #include "action.h"
@@ -3639,6 +3640,14 @@ tripoint_rel_omt game::mouse_edge_scrolling_overmap( input_context &ctxt )
     return ret.first;
 }
 
+namespace cata_imgui
+{
+auto ui2_game_ready() -> bool
+{
+    return g != nullptr;
+}
+} // namespace cata_imgui
+
 input_context get_default_mode_input_context()
 {
     input_context ctxt( "DEFAULTMODE" );
@@ -4666,8 +4675,12 @@ shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
             const int sidebar_left = panel_manager::get_manager().get_width_left();
             const int sidebar_right = panel_manager::get_manager().get_width_right();
 
+            // UI 2.0 PoC: leave terminal columns free on the right so a real
+            // ImGui panel can sit next to the real tiles map (CBN_UI2_POC).
+            const auto ui2_reserved = get_option<bool>( "IMGUI_PROTOTYPE" ) || SDL_getenv( "CBN_IMGUI" ) != nullptr
+                                      ? cata_imgui::ui2_poc_columns() : 0;
             TERRAIN_WINDOW_HEIGHT = TERMY;
-            TERRAIN_WINDOW_WIDTH = TERMX - ( sidebar_left + sidebar_right );
+            TERRAIN_WINDOW_WIDTH = TERMX - ( sidebar_left + sidebar_right ) - ui2_reserved;
             TERRAIN_WINDOW_TERM_WIDTH = TERRAIN_WINDOW_WIDTH;
             TERRAIN_WINDOW_TERM_HEIGHT = TERRAIN_WINDOW_HEIGHT;
 

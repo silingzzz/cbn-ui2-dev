@@ -21,6 +21,10 @@ namespace
 // PR-2A AIM-1: READ-ONLY real backpack view.
 // Nothing in this file modifies game state: no item is moved, used or dropped.
 // The snapshot is rebuilt every frame and never stores item pointers.
+//
+// The same drawing body is used twice:
+//   * draw()       - free floating development window (diagnostic path)
+//   * draw_panel() - fixed right hand panel used by the map coexistence PoC
 // ---------------------------------------------------------------------------
 
 bool g_open = false;
@@ -84,6 +88,101 @@ void draw_detail( const aim_row &row )
     ImGui::EndChild();
 }
 
+/// Re-validate the selection against a freshly built snapshot. The game offers
+/// no stable per-instance item id, so identity is (category, type, stack slot);
+/// when it no longer resolves the selection is dropped instead of guessing.
+void validate_selection( const aim_snapshot &snap )
+{
+    if( g_selected < 0 ) {
+        return;
+    }
+    for( std::size_t i = 0; i < snap.rows.size(); ++i ) {
+        if( row_key( snap.rows[i] ) == g_selected_key ) {
+            g_selected = static_cast<int>( i );
+            return;
+        }
+    }
+    g_selected = -1;
+    g_selected_key.clear();
+    g_status = "背包已变化：选择已清除";
+}
+
+/// Shared body: toolbar, list and detail. Caller owns Begin/End.
+void draw_contents( const aim_snapshot &snap )
+{
+    // ---- toolbar
+    ImGui::SetNextItemWidth( 200.0f );
+    ImGui::InputTextWithHint( "##search", "搜索名称…", g_search, IM_ARRAYSIZE( g_search ) );
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth( 160.0f );
+    const char *preview = g_category.empty() ? "全部分类" : g_category.c_str();
+    if( ImGui::BeginCombo( "##cat", preview ) ) {
+        if( ImGui::Selectable( "全部分类", g_category.empty() ) ) {
+            g_category.clear();
+        }
+        for( const std::string &cat : aim_categories( snap ) ) {
+            if( ImGui::Selectable( cat.c_str(), g_category == cat ) ) {
+                g_category = cat;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled( "共 %d 项 ｜ %.2f kg ｜ %.2f L",
+                         static_cast<int>( snap.rows.size() ), to_kg( snap.total_weight ),
+                         to_l( snap.total_volume ) );
+
+    ImGui::Separator();
+
+    const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
+    const float list_width = ImGui::GetContentRegionAvail().x * 0.52f;
+
+    if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
+        if( visible.empty() ) {
+            ImGui::Dummy( ImVec2( 0.0f, 40.0f ) );
+            ImGui::TextDisabled( snap.rows.empty() ? "（背包是空的）" : "（没有匹配的物品）" );
+        } else {
+            std::string last_category;
+            for( const std::size_t idx : visible ) {
+                const aim_row &row = snap.rows[idx];
+                if( row.category_name != last_category ) {
+                    last_category = row.category_name;
+                    ImGui::Spacing();
+                    ImGui::TextDisabled( "▸ %s", last_category.c_str() );
+                }
+                char label[256];
+                std::snprintf( label, sizeof( label ), "%s##%zu", row.name.c_str(), idx );
+                if( ImGui::Selectable( label, g_selected == static_cast<int>( idx ) ) ) {
+                    g_selected = static_cast<int>( idx );
+                    g_selected_key = row_key( row );
+                    g_status = "已选中";
+                }
+                ImGui::SameLine( list_width * 0.55f );
+                ImGui::TextDisabled( "x%d ｜ %.2f kg ｜ %.2f L", row.count, to_kg( row.weight ),
+                                     to_l( row.volume ) );
+            }
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+    if( ImGui::BeginChild( "aim_detail_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
+        if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
+            draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
+        } else {
+            ImGui::TextDisabled( "选择左侧物品查看真实详情" );
+            ImGui::Separator();
+            ImGui::TextDisabled( "本窗口只读：不会移动、使用或丢弃任何物品。" );
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::TextDisabled( "%s", g_status.c_str() );
+}
+
 } // namespace
 
 namespace ui2
@@ -108,24 +207,7 @@ void draw()
     }
 
     const aim_snapshot snap = build_aim_snapshot( get_avatar() );
-
-    // Re-validate the selection against the freshly built snapshot: item has no
-    // stable per-instance id, so identity is (category, type, stack slot).
-    if( g_selected >= 0 ) {
-        bool still_valid = false;
-        for( std::size_t i = 0; i < snap.rows.size(); ++i ) {
-            if( row_key( snap.rows[i] ) == g_selected_key ) {
-                g_selected = static_cast<int>( i );
-                still_valid = true;
-                break;
-            }
-        }
-        if( !still_valid ) {
-            g_selected = -1;
-            g_selected_key.clear();
-            g_status = "背包已变化：选择已清除";
-        }
-    }
+    validate_selection( snap );
 
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 60.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 780.0f, 520.0f ), ImGuiCond_FirstUseEver );
@@ -134,79 +216,32 @@ void draw()
         return;
     }
 
-    // ---- toolbar
-    ImGui::SetNextItemWidth( 200.0f );
-    ImGui::InputTextWithHint( "##search", "搜索名称…", g_search, IM_ARRAYSIZE( g_search ) );
+    draw_contents( snap );
 
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth( 160.0f );
-    const char *preview = g_category.empty() ? "全部分类" : g_category.c_str();
-    if( ImGui::BeginCombo( "##cat", preview ) ) {
-        if( ImGui::Selectable( "全部分类", g_category.empty() ) ) {
-            g_category.clear();
-        }
-        for( const std::string &cat : aim_categories( snap ) ) {
-            if( ImGui::Selectable( cat.c_str(), g_category == cat ) ) {
-                g_category = cat;
-            }
-        }
-        ImGui::EndCombo();
+    ImGui::End();
+}
+
+void draw_panel( float x, float y, float width, float height )
+{
+    // Fixed, borderless panel: the map owns everything to the left of it.
+    const aim_snapshot snap = build_aim_snapshot( get_avatar() );
+    validate_selection( snap );
+
+    ImGui::SetNextWindowPos( ImVec2( x, y ), ImGuiCond_Always );
+    ImGui::SetNextWindowSize( ImVec2( width, height ), ImGuiCond_Always );
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if( !ImGui::Begin( "##ui2_aim_panel", nullptr, flags ) ) {
+        ImGui::End();
+        return;
     }
-
-    ImGui::SameLine();
-    ImGui::TextDisabled( "共 %d 项 ｜ 总重 %.2f kg ｜ 总体积 %.2f L ｜ 刷新 #%llu",
-                         static_cast<int>( snap.rows.size() ), to_kg( snap.total_weight ),
-                         to_l( snap.total_volume ), static_cast<unsigned long long>( snap.build_id ) );
-
+    ImGui::PushStyleColor( ImGuiCol_Text, ImVec4( 0.90f, 0.88f, 0.85f, 1.00f ) );
+    ImGui::TextUnformatted( "物资（只读）" );
+    ImGui::PopStyleColor();
     ImGui::Separator();
 
-    const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
-
-    const float list_width = 440.0f;
-    if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
-        if( visible.empty() ) {
-            ImGui::Dummy( ImVec2( 0.0f, 40.0f ) );
-            ImGui::TextDisabled( snap.rows.empty() ? "（背包是空的）" : "（没有匹配的物品）" );
-        } else {
-            std::string last_category;
-            for( const std::size_t idx : visible ) {
-                const aim_row &row = snap.rows[idx];
-                if( row.category_name != last_category ) {
-                    last_category = row.category_name;
-                    ImGui::Spacing();
-                    ImGui::TextDisabled( "▸ %s", last_category.c_str() );
-                }
-                char label[256];
-                std::snprintf( label, sizeof( label ), "%s##%zu", row.name.c_str(), idx );
-                if( ImGui::Selectable( label, g_selected == static_cast<int>( idx ) ) ) {
-                    g_selected = static_cast<int>( idx );
-                    g_selected_key = row_key( row );
-                    g_status = "已选中";
-                }
-                ImGui::SameLine( 260.0f );
-                ImGui::TextDisabled( "%s ｜ x%d ｜ %.2f kg ｜ %.2f L", row.category_name.c_str(),
-                                     row.count, to_kg( row.weight ), to_l( row.volume ) );
-            }
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-    if( ImGui::BeginChild( "aim_detail_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
-        if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
-            draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
-        } else {
-            ImGui::TextDisabled( "选择左侧物品查看真实详情" );
-            ImGui::Separator();
-            ImGui::TextDisabled( "本窗口只读：不会移动、使用或丢弃任何物品。" );
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::Separator();
-    ImGui::TextDisabled( "%s", g_status.c_str() );
-    ImGui::SameLine();
-    ImGui::TextDisabled( "｜数据源：Character::inv（穿戴/手持/地面/载具不在本阶段范围）" );
+    draw_contents( snap );
 
     ImGui::End();
 }

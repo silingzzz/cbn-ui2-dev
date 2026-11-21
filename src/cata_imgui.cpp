@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -18,6 +19,13 @@
 
 #include "debug.h"
 #include "filesystem.h"
+// NOTE: must come after the imgui headers above -- debug.h redefines DebugLog
+// and breaks imgui.h when included first.
+#include "cata_imgui_ui2_aim.h"
+#include "output.h"
+#if defined( _WIN32 )
+#include <windows.h>
+#endif
 #include "options.h"
 #include "path_info.h"
 #include "translations.h"
@@ -74,13 +82,42 @@ struct trace_counters {
 };
 
 trace_counters g_trace;
+
+namespace
+{
+/// Real client area of the game window, in physical pixels.
+///
+/// SDL reports a DPI-virtualised size (2560x1344 for a ~2048px client on this
+/// host), so ImGui geometry derived from io.DisplaySize lands off-screen. The
+/// HWND client rect is the only source that matches what is actually visible.
+auto visible_window_size() -> ImVec2
+{
+#if defined( _WIN32 )
+    if( g_window != nullptr ) {
+        void *hwnd = SDL_GetPointerProperty( SDL_GetWindowProperties( g_window ),
+                                             SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr );
+        if( hwnd != nullptr ) {
+            RECT rect{};
+            if( GetClientRect( static_cast<HWND>( hwnd ), &rect ) != 0 ) {
+                const auto w = rect.right - rect.left;
+                const auto h = rect.bottom - rect.top;
+                if( w > 0 && h > 0 ) {
+                    return ImVec2( static_cast<float>( w ), static_cast<float>( h ) );
+                }
+            }
+        }
+    }
+#endif
+    return ImGui::GetIO().DisplaySize;
+}
+} // namespace
 // Last observed window pixel size, for DPI diagnostics.
 static int g_dpi_win_w = 0;
 static int g_dpi_win_h = 0;
 
 auto trace_on() -> bool
 {
-    static const bool enabled = SDL_getenv( "CBN_IMGUI_TRACE" ) != nullptr;
+static const bool enabled = SDL_getenv( "CBN_IMGUI_TRACE" ) != nullptr;
     return enabled;
 }
 
@@ -500,6 +537,22 @@ auto process_event( const SDL_Event &event ) -> bool
     }
 }
 
+auto ui2_poc_columns() -> int
+{
+    // PoC switch: reserve terminal columns for a real ImGui panel next to the
+    // real tiles map. "1" is a shorthand for the default 40 columns.
+    static const auto columns = []() -> int {
+        const char *raw = SDL_getenv( "CBN_UI2_POC" );
+        if( raw == nullptr || *raw == '\0' ) {
+            return 0;
+        }
+        const auto value = std::atoi( raw );
+        return value <= 0 ? 40 : value;
+    }
+    ();
+    return columns;
+}
+
 void clear_widget_focus()
 {
     if( g_initialized && ImGui::GetCurrentContext() != nullptr ) {
@@ -549,9 +602,21 @@ auto render( SDL_Renderer *renderer ) -> void
     }
     const bool drawn_open = g_open;
     if( g_open ) {
-        draw_prototype_window();
-        // PR-1.5 component demo, kept out of the PR-1 diagnostic window.
-        ui2::draw();
+        const auto poc_columns = ui2_poc_columns();
+        if( poc_columns > 0 && ui2_game_ready() ) {
+            // PoC path: production style layout only, no diagnostic windows.
+            // The game layout reserves `poc_columns` terminal columns on the
+            // right, so this panel sits exactly in that free area.
+            const auto display = visible_window_size();
+            const auto total_columns = TERMX > 0 ? TERMX : 100;
+            const auto panel_width = display.x * static_cast<float>( poc_columns ) /
+                                     static_cast<float>( total_columns );
+            ui2::aim::draw_panel( display.x - panel_width, 0.0f, panel_width, display.y );
+        } else {
+            draw_prototype_window();
+            // PR-1.5 component demo, kept out of the PR-1 diagnostic window.
+            ui2::draw();
+        }
     }
     // The window can also be closed from inside the frame (title bar X or the
     // 关闭 button). Schedule one repaint so the pixels actually go away, and the
