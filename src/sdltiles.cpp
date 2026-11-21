@@ -173,6 +173,28 @@ auto mouse_pixel_to_cell( const point &pixel ) -> point
 {
     const auto cell_w = std::max( 1, fontwidth * scaling_factor );
     const auto cell_h = std::max( 1, fontheight * scaling_factor );
+
+    if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+        int vw = 0;
+        int vh = 0;
+        SDL_GetWindowSize( ::window.get(), &vw, &vh );
+        RECT rc{};
+        auto rw = 0;
+        auto rh = 0;
+        if( HWND h = static_cast<HWND>( SDL_GetPointerProperty(
+                                            SDL_GetWindowProperties( ::window.get() ),
+                                            SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr ) ) ) {
+            if( GetClientRect( h, &rc ) ) {
+                rw = rc.right - rc.left;
+                rh = rc.bottom - rc.top;
+            }
+        }
+        std::fprintf( stderr,
+                      "CELL px=(%d,%d) cell=(%d,%d) fn=(%d,%d) scale=%d virtwin=(%d,%d) realwin=(%d,%d) TERM=(%d,%d)\n",
+                      pixel.x, pixel.y, cell_w, cell_h, fontwidth, fontheight, scaling_factor,
+                      vw, vh, rw, rh, TERMX, TERMY );
+        std::fflush( stderr );
+    }
     return point( pixel.x / cell_w, pixel.y / cell_h );
 }
 
