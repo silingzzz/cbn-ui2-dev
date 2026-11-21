@@ -11,6 +11,7 @@
 #include "achievement.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "event_statistics.h"
 #include "input.h"
 #include "kill_tracker.h"
@@ -88,6 +89,11 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click/hover the tabs, wheel scrolls the text view.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     catacurses::window w_view;
     scrolling_text_view view( w_view );
@@ -110,9 +116,18 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
         { tab_mode::kills, _( "KILLS" ) },
     };
 
+    std::vector<std::string> tab_texts;
+    tab_texts.reserve( tabs.size() );
+    for( const std::pair<tab_mode, std::string> &tab_entry : tabs ) {
+        tab_texts.push_back( tab_entry.second );
+    }
+    // Mouse hit areas of the tab bar, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> tab_hit_rects;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
         draw_tabs( w, tabs, tab );
+        tab_hit_rects = tab_rects( w, tab_texts, static_cast<size_t>( tab ) );
         draw_border_below_tabs( w );
         wnoutrefresh( w );
 
@@ -140,7 +155,21 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         new_tab = false;
-        if( action == "RIGHT" || action == "NEXT_TAB" ) {
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &hit : tab_hit_rects ) {
+                if( hit.first.contains( cell ) ) {
+                    tab = static_cast<tab_mode>( hit.second );
+                    new_tab = true;
+                    break;
+                }
+            }
+        }
+        if( action == "SCROLL_UP" ) {
+            view.scroll_up();
+        } else if( action == "SCROLL_DOWN" ) {
+            view.scroll_down();
+        } else if( action == "RIGHT" || action == "NEXT_TAB" ) {
             tab = static_cast<tab_mode>( static_cast<int>( tab ) + 1 );
             if( tab >= tab_mode::num_tabs ) {
                 tab = tab_mode::first_tab;
@@ -176,6 +205,9 @@ void show_kills( kill_tracker &kills )
     ctxt.register_action( "PAGE_DOWN" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: wheel scrolls the kill list.
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     catacurses::window w_view;
     scrolling_text_view view( w_view );
@@ -202,9 +234,9 @@ void show_kills( kill_tracker &kills )
     while( true ) {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
-        if( action == "DOWN" ) {
+        if( action == "DOWN" || action == "SCROLL_DOWN" ) {
             view.scroll_down();
-        } else if( action == "UP" ) {
+        } else if( action == "UP" || action == "SCROLL_UP" ) {
             view.scroll_up();
         } else if( action == "PAGE_DOWN" ) {
             view.page_down();

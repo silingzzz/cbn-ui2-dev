@@ -5,6 +5,7 @@
 
 #include "character.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "flag.h"
 #include "game.h"
 #include "game_inventory.h"
@@ -68,6 +69,10 @@ void draw_perk_menu( Character &player )
     int list_position = 0;
     int list_scroll_min = 0;
     int list_scroll_max = 0;
+
+    // Mouse hit areas of the category tabs and the perk rows, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> perk_tab_hits;
+    std::vector<std::pair<inclusive_rectangle<point>, int>> perk_row_hits;
     int list_lines = 0;
 
     int info_width = 0;
@@ -130,9 +135,11 @@ void draw_perk_menu( Character &player )
 
         // Borders & Tabs
         draw_cat_tabs( w_head, all_categories, current_category );
+        perk_tab_hits = tab_rects( w_head, all_categories, current_category );
 
         // List of perks
         werase( w_list );
+        perk_row_hits.clear();
         draw_border( w_list );
 
         list_lines = cat_perks.size();
@@ -147,6 +154,12 @@ void draw_perk_menu( Character &player )
             }
             trim_and_print( w_list, print_from, list_width - 4, highlight ? c_white : c_light_gray,
                             cat_perks[i]->get_name() );
+            perk_row_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( w_list ) + 1, getbegy( w_list ) + i - list_scroll_min + 1 ),
+                    point( getbegx( w_list ) + list_width - 2,
+                           getbegy( w_list ) + i - list_scroll_min + 1 ) ),
+                i );
         }
         draw_scrollbar( w_list, list_position, list_height, list_lines, point( list_width, 0 ) );
 
@@ -180,10 +193,36 @@ void draw_perk_menu( Character &player )
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover/click the category tabs and the perk rows.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     while( true ) {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool hit_tab = false;
+            for( const auto &tab_hit : perk_tab_hits ) {
+                if( tab_hit.first.contains( cell ) ) {
+                    current_category = static_cast<int>( tab_hit.second );
+                    list_position = 0;
+                    info_position = 0;
+                    hit_tab = true;
+                    break;
+                }
+            }
+            if( !hit_tab ) {
+                for( const auto &row_hit : perk_row_hits ) {
+                    if( row_hit.first.contains( cell ) ) {
+                        list_position = row_hit.second;
+                        info_position = 0;
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
         if( action == "PAGE_UP" ) {
             info_position -= 1;
             if( info_position < 0 ) { info_position = info_lines - 1; }
