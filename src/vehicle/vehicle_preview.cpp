@@ -236,16 +236,23 @@ void vehicle_preview_window::display(
     SDL_SetRenderClipRect(renderer.get(), nullptr);
 }
 
-auto vehicle_preview_window::mount_offset_at( const point &cell ) const -> point_rel_veh {
+auto vehicle_preview_window::mount_offset_at( const point &cell ) const
+-> std::optional<point_rel_veh> {
     const point center_px = calc_window_center_pixels();
     const int tile_w = tilecontext->get_tile_width();
     const int tile_h = tilecontext->get_tile_height();
     if( tile_w <= 0 || tile_h <= 0 || termx_pixels <= 0 || termy_pixels <= 0 ) {
-        return point_rel_veh::zero();
+        return std::nullopt;
     }
-    // Center of the clicked terminal cell, in the same pixel space the preview draws in.
-    const int pixel_x = ( cell.x - win_pos.x ) * termx_pixels + termx_pixels / 2;
-    const int pixel_y = ( cell.y - win_pos.y ) * termy_pixels + termy_pixels / 2;
+    // Reject clicks outside the preview window before doing any math.
+    if( cell.x < win_pos.x || cell.y < win_pos.y ||
+        cell.x >= win_pos.x + win_cols || cell.y >= win_pos.y + win_lines ) {
+        return std::nullopt;
+    }
+    // Center of the clicked terminal cell in absolute pixels: the same space that
+    // calc_window_center_pixels() returns (it already includes win_pos).
+    const int pixel_x = cell.x * termx_pixels + termx_pixels / 2;
+    const int pixel_y = cell.y * termy_pixels + termy_pixels / 2;
     const int qx = static_cast<int>( std::lround(
                                         static_cast<double>( pixel_x - center_px.x ) / tile_w ) );
     const int qy = static_cast<int>( std::lround(
