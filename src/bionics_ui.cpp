@@ -1,4 +1,5 @@
 #include "bionics_ui.h"
+#include "cursesport.h"
 
 #include <algorithm> //std::min
 #include <array>
@@ -631,6 +632,8 @@ void show_bionics_ui( Character &who )
 
     int scroll_position = 0;
     int cursor = 0;
+    // Screen rectangles of the bionic rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> bionic_rects;
 
     //generate the tab title string and a count of the bionics owned
     bionic_menu_mode menu_mode = ACTIVATING;
@@ -644,6 +647,9 @@ void show_bionics_ui( Character &who )
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "CONFIRM" );
+    // Mouse: hover moves the bionic cursor, click confirms the hovered entry.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "TOGGLE_SAFE_FUEL" );
@@ -652,6 +658,7 @@ void show_bionics_ui( Character &who )
     ctxt.register_action( "SORT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        bionic_rects.clear();
         if( hide ) {
             return;
         }
@@ -703,7 +710,11 @@ void show_bionics_ui( Character &who )
                 const std::string desc = string_format( "%c %s", ( *current_bionic_list )[i]->invlet,
                                                         build_bionic_powerdesc_string(
                                                                 *( *current_bionic_list )[i] ).c_str() );
-                trim_and_print( wBio, point( 2, list_start_y + i - scroll_position ), WIDTH - 3, col,
+                bionic_rects.emplace_back(
+            inclusive_rectangle<point>( point( getbegx( wBio ) + 2, getbegy( wBio ) + list_start_y + i - scroll_position ),
+                                        point( getbegx( wBio ) + WIDTH - 2, getbegy( wBio ) + list_start_y + i - scroll_position ) ),
+            static_cast<int>( i ) );
+        trim_and_print( wBio, point( 2, list_start_y + i - scroll_position ), WIDTH - 3, col,
                                 desc );
                 if( is_highlighted && menu_mode != EXAMINING && get_option < bool >( "CBM_SLOTS_ENABLED" ) ) {
                     const bionic_id bio_id = ( *current_bionic_list )[i]->id;
@@ -748,7 +759,19 @@ void show_bionics_ui( Character &who )
         }
 #endif
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : bionic_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    cursor = rect.second;
+                    break;
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
         const int ch = ctxt.get_raw_input().get_first_input();
         bionic *tmp = nullptr;
 
