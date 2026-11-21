@@ -1119,6 +1119,14 @@ tab_direction set_stats( avatar &u, points_left &points )
     old_pos.x() = 0;
     u.Character::setpos( old_pos );
 
+    // Mouse: the four stat rows; clicking the number raises the stat.
+    struct stat_row_hit {
+        inclusive_rectangle<point> row;
+        inclusive_rectangle<point> value;
+        int sel;
+    };
+    std::vector<stat_row_hit> stat_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
         draw_character_tabs( w, _( "STATS" ), u.prof );
@@ -1152,6 +1160,17 @@ tab_direction set_stats( avatar &u, points_left &points )
         mvwprintz( w, point( 16, 8 ), c_light_gray, "%2d", u.int_max );
         mvwprintz( w, point( 2, 9 ), c_light_gray, _( "Perception:" ) );
         mvwprintz( w, point( 16, 9 ), c_light_gray, "%2d", u.per_max );
+
+        stat_row_hits.clear();
+        for( int i = 0; i < 4; i++ ) {
+            const int y = 6 + i;
+            stat_row_hits.push_back( stat_row_hit{
+                inclusive_rectangle<point>( point( getbegx( w ) + 2, getbegy( w ) + y ),
+                                            point( getbegx( w ) + 18, getbegy( w ) + y ) ),
+                inclusive_rectangle<point>( point( getbegx( w ) + 16, getbegy( w ) + y ),
+                                            point( getbegx( w ) + 17, getbegy( w ) + y ) ),
+                i + 1 } );
+        }
 
         werase( w_description );
         switch( sel ) {
@@ -1240,9 +1259,21 @@ tab_direction set_stats( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const stat_row_hit &hit : stat_row_hits ) {
+                if( hit.row.contains( cell ) ) {
+                    sel = static_cast<unsigned char>( hit.sel );
+                    if( action == "SELECT" && hit.value.contains( cell ) ) {
+                        action = "RIGHT";
+                    }
+                    break;
+                }
+            }
         }
         if( action == "DOWN" ) {
             if( sel < 4 ) {
