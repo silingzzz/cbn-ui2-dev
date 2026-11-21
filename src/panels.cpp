@@ -2919,7 +2919,7 @@ void panel_manager::show_adm()
                 panel_row_hits.emplace_back(
                     inclusive_rectangle<point>(
                         point( getbegx( w ) + 3, getbegy( w ) + row_indx.first + 1 + offset ),
-                        point( getbegx( w ) + 4 + utf8_width( name ),
+                        point( getbegx( w ) + 4 + utf8_width( name ) - 1,
                                getbegy( w ) + row_indx.first + 1 + offset ) ),
                     row_indx.first );
             }
@@ -2932,7 +2932,7 @@ void panel_manager::show_adm()
             layout_row_hits.emplace_back(
                 inclusive_rectangle<point>(
                     point( getbegx( w ) + layout_x, getbegy( w ) + i ),
-                    point( getbegx( w ) + layout_x + utf8_width( _( layout.first ) ),
+                    point( getbegx( w ) + layout_x + utf8_width( _( layout.first ) ) - 1,
                            getbegy( w ) + i ) ),
                 static_cast<size_t>( i - 1 ) );
             i++;
