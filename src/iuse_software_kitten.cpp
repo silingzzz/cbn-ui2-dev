@@ -444,6 +444,12 @@ void robot_finds_kitten::process_input()
             if( action == "SELECT" ) {
                 const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
                 const point board = cell - point( getbegx( w ), getbegy( w ) );
+                // Only the playfield counts: skip the window border and the three
+                // message rows above it.
+                if( board.x < 0 || board.x >= getmaxx( w ) || board.y < 3 ||
+                    board.y >= getmaxy( w ) ) {
+                    break;
+                }
                 const point d = board - robot.pos;
                 if( d.x == 0 && d.y == 0 ) {
                     break;
