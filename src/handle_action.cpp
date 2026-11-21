@@ -1,4 +1,7 @@
 #include "action.h"
+
+#include "cata_imgui.h"
+#include "cata_imgui_ui2_aim.h"
 #include "advanced_inv.h"
 #include "animation.h"
 #include "armor_layers.h"
@@ -2472,6 +2475,24 @@ bool game::handle_action()
                 } else {
                     create_advanced_inv();
                 }
+                break;
+
+            case ACTION_IMGUI_AIM:
+                // UI 2.0 preview entry (read-only real backpack).  Opens the
+                // ImGui overlay if needed, then toggles the new AIM window.
+                // In a curses build there is nothing to show, so it is a no-op.
+#if defined( TILES )
+                if( !cata_imgui::initialized() ) {
+                    add_msg( m_info, _( "The UI 2.0 overlay is disabled (enable the IMGUI_PROTOTYPE option)." ) );
+                } else if( !cata_imgui::is_open() ) {
+                    cata_imgui::toggle();
+                    if( !ui2::aim::is_open() ) {
+                        ui2::aim::toggle();
+                    }
+                } else {
+                    ui2::aim::toggle();
+                }
+#endif
                 break;
 
             case ACTION_PICKUP:

@@ -1890,6 +1890,14 @@
   },
   {
     "type": "keybinding",
+    "name": "UI 2.0: open ImGui inventory preview (read-only)",
+    "category": "DEFAULTMODE",
+    "id": "imgui_aim",
+    "//": "No default binding on purpose: players bind it themselves so it cannot conflict with existing keys.",
+    "bindings": [  ]
+  },
+  {
+    "type": "keybinding",
     "name": "Pick up items from one nearby tile",
     "category": "DEFAULTMODE",
     "id": "pickup",

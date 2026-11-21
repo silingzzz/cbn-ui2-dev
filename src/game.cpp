@@ -3678,6 +3678,7 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "examine" );
     ctxt.register_action( "jump" );
     ctxt.register_action( "advinv" );
+    ctxt.register_action( "imgui_aim" );
     ctxt.register_action( "pickup" );
     ctxt.register_action( "pickup_all" );
     ctxt.register_action( "pickup_feet" );

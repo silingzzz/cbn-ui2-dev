@@ -113,6 +113,7 @@ std::string io::enum_to_string<action_id>( action_id data )
 
             PAIR( ACTION_INVENTORY )
             PAIR( ACTION_ADVANCEDINV )
+            PAIR( ACTION_IMGUI_AIM )
             PAIR( ACTION_COMPARE )
             PAIR( ACTION_ORGANIZE )
             PAIR( ACTION_USE )
@@ -318,6 +319,8 @@ std::string action_ident( action_id act )
             return "jump";
         case ACTION_ADVANCEDINV:
             return "advinv";
+        case ACTION_IMGUI_AIM:
+            return "imgui_aim";
         case ACTION_PICKUP:
             return "pickup";
         case ACTION_PICKUP_ALL:
@@ -1121,7 +1124,7 @@ action_id handle_action_menu()
             register_actions( { ACTION_LOOK, ACTION_PEEK, ACTION_LIST_ITEMS, ACTION_ZONES, ACTION_MAP, ACTION_SKY } );
             register_lua_action_entries( category_id );
         } else if( category_id == "inventory" ) {
-            register_actions( {ACTION_INVENTORY, ACTION_ADVANCEDINV, ACTION_SORT_ARMOR, ACTION_DIR_DROP } );
+            register_actions( {ACTION_INVENTORY, ACTION_ADVANCEDINV, ACTION_IMGUI_AIM, ACTION_SORT_ARMOR, ACTION_DIR_DROP } );
 
             // Everything below here can be accessed through
             // the inventory screen, so it's sorted to the

@@ -136,6 +136,8 @@ enum action_id : int {
     ACTION_INVENTORY,
     /** Open the advanced inventory screen */
     ACTION_ADVANCEDINV,
+    /** Open the ImGui read-only inventory preview (UI 2.0) */
+    ACTION_IMGUI_AIM,
     /** Open the item compare screen */
     ACTION_COMPARE,
     /** Swap inventory letters */
