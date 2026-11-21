@@ -1489,10 +1489,18 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
 #endif
 
+    // Mouse: rows of the three trait columns, with the column and row they map to.
+    struct trait_row_hit {
+        inclusive_rectangle<point> rect;
+        int page;
+        int line;
+    };
+    std::vector<trait_row_hit> trait_row_hits;
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
         werase( w_description );
+        trait_row_hits.clear();
 
         draw_character_tabs( w, _( "TRAITS" ), u.prof );
 
@@ -1585,6 +1593,11 @@ tab_direction set_traits( avatar &u, points_left &points )
                 int cur_y = 5 + i - start;
                 int cur_x = 2 + iCurrentPage * page_width;
                 mvwprintz( w, point( cur_x, cur_y ), col, utf8_truncate( mdata.name(), page_width - 2 ) );
+                trait_row_hits.emplace_back( trait_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + cur_x, getbegy( w ) + cur_y ),
+                        point( getbegx( w ) + cur_x + page_width - 2, getbegy( w ) + cur_y ) ),
+                    iCurrentPage, i } );
             }
 
             draw_scrollbar( w, iCurrentLine[iCurrentPage], iContentHeight, traits_size[iCurrentPage],
@@ -1603,9 +1616,22 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const trait_row_hit &hit : trait_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    iCurWorkingPage = hit.page;
+                    iCurrentLine[hit.page] = hit.line;
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
         }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
