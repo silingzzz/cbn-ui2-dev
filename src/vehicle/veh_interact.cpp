@@ -435,8 +435,10 @@ void veh_interact::do_main_loop() {
                     break;
                 }
             }
-            // Clicking anywhere else on the vehicle grid moves the cursor there.
-            if (!on_part) {
+            // Clicking the vehicle grid moves the cursor there. This must not run on
+            // hover: the view recenters on the cursor, so a moving cursor would drag
+            // the whole grid around under the pointer.
+            if (!on_part && action == "SELECT") {
                 if (const std::optional<point_rel_veh> off = mount_offset_at_cell(cell)) {
                     move_cursor(tripoint_rel_veh(*off, vehicle_cursor.z()));
                 }
@@ -1027,21 +1029,25 @@ void veh_interact::do_install() {
         if (action == "MOUSE_MOVE" || action == "SELECT") {
             const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
             bool hit_tab = false;
-            for (const auto& hit : list_hits.tabs) {
-                if (hit.first.contains(cell)) {
-                    const auto new_tab = static_cast<size_t>(hit.second);
-                    if (new_tab != tab) {
-                        tab = new_tab;
-                        tab_vparts.clear();
-                        pos = 0;
-                        copy_if(can_mount.begin(), can_mount.end(), back_inserter(tab_vparts),
-                                tab_filters[tab]);
+            // Switching tabs (and opening the filter) must be an explicit click:
+            // sweeping the pointer across the tab bar must not change anything.
+            if (action == "SELECT") {
+                for (const auto& hit : list_hits.tabs) {
+                    if (hit.first.contains(cell)) {
+                        const auto new_tab = static_cast<size_t>(hit.second);
+                        if (new_tab != tab) {
+                            tab = new_tab;
+                            tab_vparts.clear();
+                            pos = 0;
+                            copy_if(can_mount.begin(), can_mount.end(), back_inserter(tab_vparts),
+                                    tab_filters[tab]);
+                        }
+                        if (tab == 7) {
+                            action = "FILTER";
+                        }
+                        hit_tab = true;
+                        break;
                     }
-                    if (tab == 7) {
-                        action = "FILTER";
-                    }
-                    hit_tab = true;
-                    break;
                 }
             }
             if (!hit_tab) {
