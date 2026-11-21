@@ -15,6 +15,7 @@
 #    include "vpart_position.h"
 
 #    include <algorithm>
+#    include <cmath>
 
 // Local empty string for tile_search_params
 static const std::string empty_string;
@@ -235,8 +236,25 @@ void vehicle_preview_window::display(
     SDL_SetRenderClipRect(renderer.get(), nullptr);
 }
 
-vehicle_preview_window::~vehicle_preview_window() { clear(); }
+auto vehicle_preview_window::mount_offset_at( const point &cell ) const -> point_rel_veh {
+    const point center_px = calc_window_center_pixels();
+    const int tile_w = tilecontext->get_tile_width();
+    const int tile_h = tilecontext->get_tile_height();
+    if( tile_w <= 0 || tile_h <= 0 || termx_pixels <= 0 || termy_pixels <= 0 ) {
+        return point_rel_veh::zero();
+    }
+    // Center of the clicked terminal cell, in the same pixel space the preview draws in.
+    const int pixel_x = ( cell.x - win_pos.x ) * termx_pixels + termx_pixels / 2;
+    const int pixel_y = ( cell.y - win_pos.y ) * termy_pixels + termy_pixels / 2;
+    const int qx = static_cast<int>( std::lround(
+                                        static_cast<double>( pixel_x - center_px.x ) / tile_w ) );
+    const int qy = static_cast<int>( std::lround(
+                                        static_cast<double>( pixel_y - center_px.y ) / tile_h ) );
+    // display() draws the mount offset q at rotate( 3, q ), so undo that rotation.
+    return point_rel_veh( point( qx, qy ) ).rotate( 1 );
+}
 
+vehicle_preview_window::~vehicle_preview_window() { clear(); }
 void vehicle_preview_window::clear() {
     if (saved_original_zoom) { tilecontext->set_draw_scale(original_zoom); }
 

@@ -48,6 +48,13 @@ public:
     /** Get current zoom level */
     auto get_zoom() const -> int { return zoom; }
 
+    /**
+     * Hit-test a terminal cell inside the preview window and return the vehicle
+     * mount offset it shows (relative to the displayed cursor), if any.
+     * Used to move the vehicle cursor with the mouse.
+     */
+    auto mount_offset_at( const point &cell ) const -> point_rel_veh;
+
 private:
     // The window we're rendering into (for bounds calculation)
     catacurses::window w_preview;

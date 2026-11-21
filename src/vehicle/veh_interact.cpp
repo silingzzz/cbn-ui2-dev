@@ -427,10 +427,18 @@ void veh_interact::do_main_loop() {
         std::string action = main_context.handle_input();
         if (action == "MOUSE_MOVE" || action == "SELECT") {
             const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            bool on_part = false;
             for (const auto& rect : part_rects) {
                 if (rect.first.contains(cell)) {
                     cpart = rect.second;
+                    on_part = true;
                     break;
+                }
+            }
+            // Clicking anywhere else on the vehicle grid moves the cursor there.
+            if (!on_part) {
+                if (const std::optional<point_rel_veh> off = mount_offset_at_cell(cell)) {
+                    move_cursor(tripoint_rel_veh(*off, vehicle_cursor.z()));
                 }
             }
             if (action == "SELECT") { action = "CONFIRM"; }
@@ -2177,6 +2185,26 @@ auto veh_interact::can_potentially_install(const vpart_info& vpart) -> bool {
  * @param d How far to move the cursor.
  * @param dstart_at How far to change the start position for vehicle part descriptions
  */
+auto veh_interact::mount_offset_at_cell( const point &cell ) const -> std::optional<point_rel_veh> {
+#if defined(TILES)
+    if( get_option<bool>( "VEHICLE_EDIT_TILES" ) && is_draw_tiles_mode() ) {
+        if( tile_preview ) {
+            return tile_preview->mount_offset_at( cell );
+        }
+        return std::nullopt;
+    }
+#endif
+    const point origin( getbegx( w_disp ), getbegy( w_disp ) );
+    const point win_size( getmaxx( w_disp ), getmaxy( w_disp ) );
+    const point rel = cell - origin;
+    if( rel.x < 0 || rel.y < 0 || rel.x >= win_size.x || rel.y >= win_size.y ) {
+        return std::nullopt;
+    }
+    // display_veh() draws the mount offset q at h_size + rotate( 3, q ), so undo the rotation.
+    const point h_size = win_size / 2;
+    return point_rel_veh( rel - h_size ).rotate( 1 );
+}
+
 void veh_interact::move_cursor(tripoint_rel_veh d, int dstart_at) {
     const auto& here = get_map();
 

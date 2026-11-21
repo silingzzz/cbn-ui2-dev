@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -185,6 +186,9 @@ private:
         std::vector<std::pair<inclusive_rectangle<point>, size_t>> tabs;
     };
     list_hit_areas list_hits;
+
+    /// Maps a terminal cell inside the vehicle grid to the mount offset it shows.
+    auto mount_offset_at_cell( const point &cell ) const -> std::optional<point_rel_veh>;
     void display_details(const vpart_info* part);
 
     struct part_option {
