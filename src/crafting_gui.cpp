@@ -1531,18 +1531,21 @@ const recipe *select_crafting_recipe( int &batch_size_out, Character &crafter )
                     continue;
                 }
             }
+            bool hit_recipe_row = false;
             const point rel = cell - drawn_origin;
             if( drawn_rows > 0 && rel.y >= 0 && rel.y < drawn_rows &&
                 rel.x >= 0 && rel.x < drawn_width ) {
                 const int index = drawn_first_index + rel.y;
-                if( index >= 0 && static_cast<size_t>( index ) < current.size() &&
-                    index != line ) {
-                    line = index;
-                    keepline = true;
-                    user_moved_line = true;
+                if( index >= 0 && static_cast<size_t>( index ) < current.size() ) {
+                    hit_recipe_row = true;
+                    if( index != line ) {
+                        line = index;
+                        keepline = true;
+                        user_moved_line = true;
+                    }
                 }
             }
-            if( action == "SELECT" ) {
+            if( action == "SELECT" && hit_recipe_row ) {
                 action = "CONFIRM";
             }
         }
