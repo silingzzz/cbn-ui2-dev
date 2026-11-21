@@ -257,13 +257,9 @@ void user_interface::show()
                 }
                 iLine = row_hit.second;
                 const int rel_x = cell.x - getbegx( w );
-                if( rel_x >= 60 ) {
-                    iColumn = 3;
-                } else if( rel_x >= 50 ) {
-                    iColumn = 2;
-                } else {
-                    iColumn = 1;
-                }
+                // The rule editor only has two columns (rule text and include/exclude);
+                // there is no third column to select.
+                iColumn = rel_x >= 50 ? 2 : 1;
                 break;
             }
             continue;
