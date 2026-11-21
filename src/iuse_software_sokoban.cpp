@@ -1,6 +1,7 @@
 #include "iuse_software_sokoban.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -10,6 +11,7 @@
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "fstream_utils.h"
 #include "input.h"
 #include "output.h"
@@ -240,6 +242,8 @@ int sokoban_game::start_game()
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "UNDO" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a cell next to the player to walk one step that way.
+    ctxt.register_action( "SELECT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w_sokoban );
@@ -301,6 +305,21 @@ int sokoban_game::start_game()
         }
 
         bMoved = false;
+        if( action == "SELECT" ) {
+            // Mouse: a click on a cell adjacent to the player walks one step that way.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point level_offset(
+                ( FULL_SCREEN_WIDTH - 2 - mLevelInfo[iCurrentLevel]["MaxLevelX"] ) / 2,
+                ( FULL_SCREEN_HEIGHT - 2 - mLevelInfo[iCurrentLevel]["MaxLevelY"] ) / 2 );
+            const point board = cell - point( getbegx( w_sokoban ), getbegy( w_sokoban ) ) -
+                                level_offset;
+            const point delta = board - pl;
+            if( std::abs( delta.x ) + std::abs( delta.y ) == 1 ) {
+                dir = delta;
+                bMoved = true;
+            }
+            action = "MOUSE_HANDLED";
+        }
         if( const std::optional<tripoint_rel_ms> vec = ctxt.get_direction( action ) ) {
             dir = vec->xy().raw();
             bMoved = true;
