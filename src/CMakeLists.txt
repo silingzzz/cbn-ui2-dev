@@ -152,7 +152,7 @@ if (TILES)
     # Tiles-specific setup
     target_compile_definitions(cataclysm-bn-tiles-common PUBLIC TILES)
     find_package(imgui CONFIG REQUIRED)
-    target_sources(cataclysm-bn-tiles-common PRIVATE cata_imgui.cpp cata_imgui.h cata_imgui_ui2.cpp cata_imgui_ui2.h cata_imgui_ui2_lists.cpp cata_imgui_ui2_lists.h)
+    target_sources(cataclysm-bn-tiles-common PRIVATE cata_imgui.cpp cata_imgui.h cata_imgui_ui2.cpp cata_imgui_ui2.h cata_imgui_ui2_lists.cpp cata_imgui_ui2_lists.h cata_imgui_ui2_menu.cpp cata_imgui_ui2_menu.h)
     target_link_libraries(cataclysm-bn-tiles-common PUBLIC imgui::imgui)
     link_sdl_core(cataclysm-bn-tiles-common)
     if (DYNAMIC_ATLAS)

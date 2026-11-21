@@ -1,5 +1,6 @@
 #include "cata_imgui_ui2.h"
 #include "cata_imgui_ui2_lists.h"
+#include "cata_imgui_ui2_menu.h"
 
 #if defined( TILES )
 
@@ -191,6 +192,8 @@ void draw()
     draw_second_window();
     // PR-1.5 B batch: list and table components.
     lists::draw();
+    // PR-1.5 C batch: context menu, tooltip and toast feedback.
+    menu::draw();
 }
 
 } // namespace ui2
