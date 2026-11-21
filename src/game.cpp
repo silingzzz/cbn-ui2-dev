@@ -10929,6 +10929,12 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover/click selects the vehicle row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+
+    // Mouse hit areas of the visible vehicle rows, with the vehicle index.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> vmenu_vehicle_row_hits;
 
     ui.on_redraw( [&]( ui_adaptor & ui ) {
         if( hide_ui ) {
@@ -10948,6 +10954,7 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
                        _( "You don't see any vehicles around you!" ) );
         } else {
             werase( w_vehicles );
+            vmenu_vehicle_row_hits.clear();
 
             const int iNumVehicles = vehicle_list.size();
             const int numw = iNumVehicles > 999 ? 4 :
@@ -10966,6 +10973,11 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
 
                 trim_and_print( w_vehicles, point( 1, y ), width - 18, name_color,
                                 entry.veh->name );
+                vmenu_vehicle_row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w_vehicles ) + 1, getbegy( w_vehicles ) + y ),
+                        point( getbegx( w_vehicles ) + width - 1, getbegy( w_vehicles ) + y ) ),
+                    idx );
 
                 const int dist = entry.dist;
                 const int numd = dist > 999 ? 4 :
@@ -11128,6 +11140,15 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
 
         ui_manager::redraw();
         action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &hit : vmenu_vehicle_row_hits ) {
+                if( hit.first.contains( cell ) ) {
+                    iActive = hit.second;
+                    break;
+                }
+            }
+        }
     } while( action != "QUIT" );
 
     viewer.view_offset = stored_view_offset;
