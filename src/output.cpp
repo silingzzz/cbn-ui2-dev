@@ -426,8 +426,9 @@ void scrollable_text( const std::function<catacurses::window()> &init_window,
             beg_line = std::min( max_beg_line, beg_line + 3 );
         } else if( action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const int rel_x = cell.x - getbegx( w ) - text2.x;
             const int rel = cell.y - getbegy( w ) - text2.y;
-            if( rel >= 0 && rel < text_h && max_beg_line > 0 ) {
+            if( rel_x >= 0 && rel_x < text_w && rel >= 0 && rel < text_h && max_beg_line > 0 ) {
                 const double fraction = static_cast<double>( rel ) /
                                         std::max( 1, text_h - 1 );
                 beg_line = static_cast<int>( max_beg_line * fraction );
