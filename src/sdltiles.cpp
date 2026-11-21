@@ -169,6 +169,13 @@ static int TERMINAL_HEIGHT;
 bool fullscreen;
 int scaling_factor;
 
+auto mouse_pixel_to_cell( const point &pixel ) -> point
+{
+    const auto cell_w = std::max( 1, fontwidth * scaling_factor );
+    const auto cell_h = std::max( 1, fontheight * scaling_factor );
+    return point( pixel.x / cell_w, pixel.y / cell_h );
+}
+
 static SDL_Joystick *joystick; // Only one joystick for now.
 
 using cata_cursesport::curseline;

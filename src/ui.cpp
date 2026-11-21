@@ -1115,14 +1115,8 @@ void uilist::query( bool loop, int timeout )
                 const auto &entry = entries[fentries[i]];
                 // input_event::mouse_pos is in screen pixels, while drawn_rect is
                 // in terminal cells; convert before hit testing.
-                const auto cell_w = std::max( 1, projected_window_width() / TERMX / get_scaling_factor() );
-                const auto cell_h = std::max( 1, projected_window_height() / TERMY / get_scaling_factor() );
-                const point cell( event.mouse_pos.x / cell_w, event.mouse_pos.y / cell_h );
-                if( SDL_getenv2_hover_debug() ) {
-                    std::fprintf( stderr, "HOVER-HIT i=%zu cell=(%d,%d) cellwh=(%d,%d)\n", i, cell.x, cell.y,
-                                  cell_w, cell_h );
-                    std::fflush( stderr );
-                }
+                const point cell = mouse_pixel_to_cell( event.mouse_pos );
+
                 if( entry.drawn_rect && entry.drawn_rect->contains( cell ) ) {
                     if( static_cast<int>( i ) != fselected ) {
                         fselected = static_cast<int>( i );

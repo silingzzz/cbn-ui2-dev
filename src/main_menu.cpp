@@ -755,11 +755,7 @@ bool main_menu::opening_screen()
 
         // also check special keys
         if( action == "MOUSE_MOVE" ) {
-            const auto cell_w = projected_window_width() / TERMX / get_scaling_factor() > 0 ?
-                                projected_window_width() / TERMX / get_scaling_factor() : 1;
-            const auto cell_h = projected_window_height() / TERMY / get_scaling_factor() > 0 ?
-                                projected_window_height() / TERMY / get_scaling_factor() : 1;
-            const point cell( sInput.mouse_pos.x / cell_w, sInput.mouse_pos.y / cell_h );
+            const point cell = mouse_pixel_to_cell( sInput.mouse_pos );
             for( const auto &entry : main_menu_button_map ) {
                 if( entry.first.contains( cell ) ) {
                     if( sel1 != entry.second ) {

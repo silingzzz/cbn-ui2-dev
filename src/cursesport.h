@@ -85,6 +85,18 @@ bool handle_resize( int w, int h );
 void resize_term( int cell_w, int cell_h );
 int get_scaling_factor();
 
+#if defined( TILES )
+/// Convert a mouse position in screen pixels into terminal cells.
+/// input_event::mouse_pos is raw SDL pixels while window geometry is in cells,
+/// so any hit testing has to go through this.
+auto mouse_pixel_to_cell( const point &pixel ) -> point;
+#else
+inline auto mouse_pixel_to_cell( const point &pixel ) -> point
+{
+    return pixel;
+}
+#endif
+
 #endif
 
 
