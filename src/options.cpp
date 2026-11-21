@@ -54,6 +54,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -4054,6 +4055,12 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             const point rel = cell - opt_drawn_origin;
+            if( std::getenv( "CBN_HOVER_DEBUG" ) != nullptr ) {
+                std::fprintf( stderr, "OPT cell=(%d,%d) origin=(%d,%d) rel=(%d,%d) rows=%d start=%d\n",
+                              cell.x, cell.y, opt_drawn_origin.x, opt_drawn_origin.y, rel.x, rel.y,
+                              opt_drawn_rows, opt_drawn_start );
+                std::fflush( stderr );
+            }
             if( opt_drawn_rows > 0 && rel.y >= 0 && rel.y < opt_drawn_rows &&
                 rel.x > 0 && rel.x < opt_drawn_width ) {
                 const int index = opt_drawn_start + rel.y;
