@@ -141,14 +141,17 @@ static std::vector<page> split_to_pages( const std::vector<talk_data> &responses
     return ret;
 }
 
-static void print_responses( const catacurses::window &w, const page &responses,
+static auto print_responses( const catacurses::window &w, const page &responses,
                              size_t selected_response )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>
 {
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> rects;
     // Responses go on the right side of the window, add 2 for border + space
     const auto divider_x = dialogue_divider_x( w );
     const auto x_start = divider_x + 1;
     // First line we can print on, +1 for border, +2 for your name + newline
     const auto y_start = 2 + 1 + header_height;
+    const auto x_end = std::max( x_start, getmaxx( w ) - 2 );
 
     int curr_y = y_start;
     for( const page_entry &entry : responses.entries ) {
@@ -156,6 +159,7 @@ static void print_responses( const catacurses::window &w, const page &responses,
         const auto base_col = entry.col == c_white ? c_light_gray : entry.col;
         const auto col = selected ? hilite( entry.col ) : base_col;
         const auto letter_col = selected ? hilite( entry.col ) : c_light_green;
+        const auto first_y = curr_y;
         bool first_line = true;
         for( const std::string &line : entry.lines ) {
             // add letter and space to only first line
@@ -168,7 +172,12 @@ static void print_responses( const catacurses::window &w, const page &responses,
             }
             curr_y += 1;
         }
+        if( curr_y > first_y ) {
+            rects.emplace_back( inclusive_rectangle<point>( point( x_start, first_y ),
+                               point( x_end, curr_y - 1 ) ), entry.response_index );
+        }
     }
+    return rects;
 }
 
 static void print_keybindings( const catacurses::window &w )
@@ -210,6 +219,16 @@ void dialogue_window::refresh_response_display()
     curr_page = 0;
     can_scroll_down = false;
     can_scroll_up = false;
+}
+
+auto dialogue_window::response_at( const point &cell ) const -> std::optional<size_t>
+{
+    for( const auto &[rect, index] : response_rects ) {
+        if( rect.contains( cell ) ) {
+            return index;
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<size_t> dialogue_window::handle_scrolling( const int ch )
@@ -259,7 +278,9 @@ void dialogue_window::display_responses( const std::vector<talk_data> &responses
         if( curr_page >= pages.size() ) {
             curr_page = pages.size() - 1;
         }
-        print_responses( d_win, pages[curr_page], selected_response );
+        response_rects = print_responses( d_win, pages[curr_page], selected_response );
+    } else {
+        response_rects.clear();
     }
     print_keybindings( d_win );
     can_scroll_up = curr_page > 0;

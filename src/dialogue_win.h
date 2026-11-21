@@ -7,7 +7,9 @@
 #include <optional>
 
 #include "color.h"
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
+#include "point.h"
 
 /** Represents avatar response */
 struct talk_data {
@@ -29,6 +31,8 @@ class dialogue_window
         std::optional<size_t> handle_scrolling( int ch );
         void display_responses( const std::vector<talk_data> &responses, size_t selected_response );
         void refresh_response_display();
+        /// Response index whose drawn row covers the given terminal cell, if any.
+        auto response_at( const point &cell ) const -> std::optional<size_t>;
         /** Adds message to history. It must be already translated. */
         void add_to_history( const std::string &msg );
 
@@ -52,6 +56,8 @@ class dialogue_window
         /* Page start indices for selecting first entry of page when paging up/down */
         size_t next_page_start = 0;
         size_t prev_page_start = 0;
+        /// Screen rectangles of the response rows drawn last frame, with their response index.
+        std::vector<std::pair<inclusive_rectangle<point>, size_t>> response_rects;
 
         // Prints history. Automatically highlighting last message.
         void print_history();

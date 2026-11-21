@@ -16,6 +16,7 @@
 #include "color.h"
 #include "condition.h"
 #include "creature.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "dialogue.h" // IWYU pragma: associated
 #include "enums.h"
@@ -2216,7 +2217,37 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
         d_win.refresh_response_display();
         do {
             ui_manager::redraw();
-            ch = inp_mngr.get_input_event().get_first_input();
+            const input_event evt = inp_mngr.get_input_event();
+            ch = evt.get_first_input();
+            if( evt.type == input_event_t::mouse ) {
+                // Mouse: hover moves the response cursor, click confirms the hovered
+                // response, wheel pages through responses.
+                if( ch == MOUSE_MOVE ) {
+                    const auto hit = d_win.response_at( mouse_pixel_to_cell( evt.mouse_pos ) );
+                    if( hit ) {
+                        selected_response = *hit;
+                    }
+                    continue;
+                }
+                if( ch == SCROLLWHEEL_UP || ch == SCROLLWHEEL_DOWN ) {
+                    const auto scroll_entry_index = d_win.handle_scrolling(
+                                                        ch == SCROLLWHEEL_UP ? KEY_PPAGE : KEY_NPAGE );
+                    if( scroll_entry_index ) {
+                        selected_response = *scroll_entry_index;
+                    }
+                    continue;
+                }
+                if( ch == MOUSE_BUTTON_LEFT ) {
+                    const auto hit = d_win.response_at( mouse_pixel_to_cell( evt.mouse_pos ) );
+                    if( !hit ) {
+                        continue;
+                    }
+                    selected_response = *hit;
+                    ch = KEY_ENTER;
+                } else {
+                    continue;
+                }
+            }
             if( ch == KEY_UP ) {
                 if( selected_response > 0 ) {
                     selected_response -= 1;
