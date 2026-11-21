@@ -1,8 +1,10 @@
 #include "iuse_software_kitten.h"
 
+#include <cmath>
 #include <cstdlib>  // Needed for rand()
 #include <vector>
 
+#include "cursesport.h"
 #include "input.h"
 #include "output.h"
 #include "posix_time.h"
@@ -435,7 +437,23 @@ void robot_finds_kitten::process_input()
         case ui_state::invalid_input:
         case ui_state::bogus_message: {
             ctxt.register_cardinal();
-            const std::string action = ctxt.handle_input();
+            // Mouse: click a cell to step towards it.
+            ctxt.register_action( "SELECT" );
+            const std::string action_in = ctxt.handle_input();
+            std::string action = action_in;
+            if( action == "SELECT" ) {
+                const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+                const point board = cell - point( getbegx( w ), getbegy( w ) );
+                const point d = board - robot.pos;
+                if( d.x == 0 && d.y == 0 ) {
+                    break;
+                }
+                if( std::abs( d.x ) >= std::abs( d.y ) ) {
+                    action = d.x > 0 ? "RIGHT" : "LEFT";
+                } else {
+                    action = d.y > 0 ? "DOWN" : "UP";
+                }
+            }
             if( action == "QUIT" ) {
                 current_ui_state = ui_state::exit;
             } else if( action == "ANY_INPUT" ) {
