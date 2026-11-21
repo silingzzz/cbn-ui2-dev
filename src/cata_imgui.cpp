@@ -309,6 +309,8 @@ void toggle()
         // A focused text widget would otherwise keep eating keystrokes after the
         // overlay is gone; the input manager has no other way to drop that focus.
         g_clear_text_focus = true;
+        // Keys pressed while the overlay was open must not keep it as their owner.
+        forget_key_ownership();
     }
 }
 
@@ -329,8 +331,9 @@ void init( SDL_Window *window, SDL_Renderer *renderer )
     ImGuiIO &io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    ::ui2::style::apply();
+    // The project palette must win over the framework default, so apply it last.
     ImGui::StyleColorsDark();
+    ::ui2::style::apply();
 
     // Font atlas must exist before the renderer backend builds its texture.
     load_cjk_font();
@@ -453,8 +456,13 @@ auto process_event( const SDL_Event &event ) -> bool
         trace_maybe_log();
     }
 
-    if( event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_F10 ) {
-        toggle();
+    if( event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F10 ) {
+        // F10 toggles the overlay and belongs to it for this press (including
+        // auto-repeat), so the game never sees the key up or the repeats.
+        if( !event.key.repeat ) {
+            toggle();
+        }
+        key_owner_table[key_slot( event.key.scancode )] = KEY_OWNER_IMGUI;
         return true;
     }
 
