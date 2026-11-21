@@ -79,6 +79,8 @@ private:
     const vehicle_part* sel_vehicle_part = nullptr;
 
     int cpart = -1;
+    // Screen rectangles of the part rows drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> part_rects;
     int page_size;
     int fuel_index = 0; /** Starting index of where to start printing fuels from */
     // height of the stats window

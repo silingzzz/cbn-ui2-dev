@@ -1,4 +1,5 @@
 #include "veh_interact.h"
+#include "cursesport.h"
 
 #include "../overmap/overmapbuffer.h"
 #include "activity_handlers.h"
@@ -226,6 +227,8 @@ veh_interact::veh_interact(vehicle& veh, tripoint_mnt_veh p)
     }
 
     main_context.register_directions();
+    main_context.register_action("MOUSE_MOVE");
+    main_context.register_action("SELECT");
     main_context.register_action("QUIT");
     main_context.register_action("INSTALL");
     main_context.register_action("REPAIR");
@@ -370,9 +373,10 @@ auto veh_interact::create_or_get_ui_adaptor() -> shared_ptr_fast<ui_adaptor> {
             display_veh();
 
             werase(w_parts);
+            part_rects.clear();
             veh->print_part_list(
                 w_parts, 0, getmaxy(w_parts) - 1, getmaxx(w_parts), cpart, highlight_part, true,
-                parts_list_offset);
+                parts_list_offset, &part_rects);
             wnoutrefresh(w_parts);
 
             werase(w_msg);
@@ -420,7 +424,17 @@ void veh_interact::do_main_loop() {
     while (!finish) {
         calc_overview();
         ui_manager::redraw();
-        const std::string action = main_context.handle_input();
+        std::string action = main_context.handle_input();
+        if (action == "MOUSE_MOVE" || action == "SELECT") {
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            for (const auto& rect : part_rects) {
+                if (rect.first.contains(cell)) {
+                    cpart = rect.second;
+                    break;
+                }
+            }
+            if (action == "SELECT") { action = "CONFIRM"; }
+        }
         msg.reset();
         if (const std::optional<tripoint_rel_ms> vec = main_context.get_direction(action)) {
             const point_rel_veh vehicle_delta = vec->xy().rotate(1).reinterpret_as<point_rel_veh>();
@@ -999,7 +1013,8 @@ void veh_interact::do_install() {
 
         ui_manager::redraw();
 
-        const std::string action = main_context.handle_input();
+        std::string action = main_context.handle_input();
+
         msg.reset();
         if (action == "FILTER") {
             string_input_popup()
@@ -1189,7 +1204,8 @@ void veh_interact::do_repair() {
 
         ui_manager::redraw();
 
-        const std::string action = main_context.handle_input();
+        std::string action = main_context.handle_input();
+
         msg.reset();
         if ((action == "REPAIR" || action == "CONFIRM") && ok) {
             reason = cant_do('r');
@@ -1900,7 +1916,8 @@ void veh_interact::do_remove() {
         ui_manager::redraw();
 
         // read input
-        const std::string action = main_context.handle_input();
+        std::string action = main_context.handle_input();
+
         msg.reset();
         if (can_remove && (action == "REMOVE" || action == "CONFIRM")) {
             switch (reason) {

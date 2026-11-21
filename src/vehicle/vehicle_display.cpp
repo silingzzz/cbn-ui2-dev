@@ -3,6 +3,7 @@
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "itype.h"
 #include "options.h"
@@ -163,7 +164,8 @@ auto vehicle::part_color(const int p, const bool exact) const -> nc_color {
  */
 auto vehicle::print_part_list(
     const catacurses::window& win, int y1, const int max_y, int width, int p, int hl /*= -1*/,
-    bool detail, int start_at) const -> int {
+    bool detail, int start_at,
+    std::vector<std::pair<inclusive_rectangle<point>, int>>* row_rects) const -> int {
     if (p < 0 || p >= static_cast<int>(parts.size())) { return y1; }
     std::vector<int> pl = this->parts_at_relative(parts[p].mount, true);
     int y = y1;
@@ -227,6 +229,13 @@ auto vehicle::print_part_list(
         trim_and_print(win, point(2, y), getmaxx(win) - 4,
                        static_cast<int>(i) == hl ? hilite(c_light_gray) : c_light_gray, partname);
         wprintz(win, sym_color, right_sym);
+
+        if (row_rects != nullptr) {
+            row_rects->emplace_back(
+                inclusive_rectangle<point>(point(getbegx(win), getbegy(win) + y),
+                                           point(getbegx(win) + width - 1, getbegy(win) + y)),
+                pl[i]);
+        }
 
         if (i == 0 && vpart_position(const_cast<vehicle&>(*this), pl[i]).is_inside()) {
             //~ indicates that a vehicle part is inside

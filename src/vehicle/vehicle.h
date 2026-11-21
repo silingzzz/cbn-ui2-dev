@@ -536,7 +536,10 @@ public:
     // Vehicle parts list - all the parts on a single tile
     auto print_part_list(
         const catacurses::window& win, int y1, int max_y, int width, int p, int hl = -1,
-        bool detail = false, int start_at = 0) const -> int;
+        bool detail = false, int start_at = 0,
+        /// Optional: receives one screen-rectangle per drawn part row, mapping the
+        /// row to the absolute vehicle part index, for mouse hit testing.
+        std::vector<std::pair<inclusive_rectangle<point>, int>>* row_rects = nullptr) const -> int;
 
     // Vehicle parts descriptions - descriptions for all the parts on a single tile
     void print_vparts_descs(
