@@ -3804,6 +3804,9 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "CONFIRM" );
+    // Mouse: hover moves the option cursor, click confirms the hovered option.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     const int iWorldOffset = world_options_only ? 2 : 0;
@@ -3849,6 +3852,13 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
 
         ui.position_from_window( w_options_border );
     };
+
+    // Geometry of the last option list draw, for mouse hit testing.
+    int opt_drawn_start = 0;
+    int opt_drawn_rows = 0;
+    int opt_drawn_width = 0;
+    point opt_drawn_origin = point_zero;
+    std::vector<int> opt_visible_snapshot;
 
     ui_adaptor ui;
     ui.on_screen_resize( init_windows );
@@ -3953,6 +3963,14 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         calcStartPos( iStartPos, curr_line_visible, iContentHeight,
                       static_cast<int>( visible_items.size() ) );
 
+        // Remember the geometry of the option list for mouse hit testing.
+        opt_drawn_origin = point( getbegx( w_options ), getbegy( w_options ) );
+        opt_drawn_start = iStartPos;
+        opt_drawn_rows = std::min<int>( iContentHeight,
+                                        static_cast<int>( visible_items.size() ) - iStartPos );
+        opt_drawn_width = getmaxx( w_options );
+        opt_visible_snapshot = visible_items;
+
         // where the column with the names starts
         const size_t name_col = 5;
         // where the column with the values starts
@@ -4031,7 +4049,22 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
         auto &cOPTIONS = ( ingame || world_options_only ) && iCurrentPage == iWorldOptPage ?
                          ACTIVE_WORLD_OPTIONS : OPTIONS;
 
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point rel = cell - opt_drawn_origin;
+            if( opt_drawn_rows > 0 && rel.y >= 0 && rel.y < opt_drawn_rows &&
+                rel.x > 0 && rel.x < opt_drawn_width ) {
+                const int index = opt_drawn_start + rel.y;
+                if( index >= 0 && index < static_cast<int>( opt_visible_snapshot.size() ) ) {
+                    iCurrentLine = opt_visible_snapshot[index];
+                }
+            }
+            if( action == "SELECT" ) {
+                action = "CONFIRM";
+            }
+        }
 
         if( world_options_only && ( action == "NEXT_TAB" || action == "PREV_TAB" ||
                                     ( action == "QUIT" && ( !on_quit || on_quit() ) ) ) ) {
