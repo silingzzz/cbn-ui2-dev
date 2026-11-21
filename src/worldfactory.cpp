@@ -1238,42 +1238,46 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
             const bool hover_debug = std::getenv( "CBN_HOVER_DEBUG" ) != nullptr;
             bool hit_row = false;
             bool hit_control = false;
-            for( const auto &rect : tab_hit_rects ) {
-                if( rect.first.contains( cell ) ) {
-                    iCurrentTab = rect.second;
-                    startsel[0] = 0;
-                    cursel[0] = 0;
-                    hit_control = true;
-                    break;
-                }
-            }
-            if( !hit_control ) {
-                for( const auto &rect : header_hit_rects ) {
+            // Tabs, headers and the +/- reorder buttons act only on an explicit
+            // click: hovering over them must not switch tabs or reorder mods.
+            if( action == "SELECT" ) {
+                for( const auto &rect : tab_hit_rects ) {
                     if( rect.first.contains( cell ) ) {
-                        active_header = rect.second;
-                        hit_control = true;
-                        break;
-                    }
-                }
-            }
-            if( !hit_control && active_mod_order.size() > 1 ) {
-                for( const auto &rect : active_hit_rects.shift_up ) {
-                    if( rect.first.contains( cell ) ) {
-                        active_header = 1;
-                        cursel[1] = rect.second;
-                        mman_ui->try_shift( '+', cursel[1], active_mod_order );
+                        iCurrentTab = rect.second;
+                        startsel[0] = 0;
+                        cursel[0] = 0;
                         hit_control = true;
                         break;
                     }
                 }
                 if( !hit_control ) {
-                    for( const auto &rect : active_hit_rects.shift_down ) {
+                    for( const auto &rect : header_hit_rects ) {
+                        if( rect.first.contains( cell ) ) {
+                            active_header = rect.second;
+                            hit_control = true;
+                            break;
+                        }
+                    }
+                }
+                if( !hit_control && active_mod_order.size() > 1 ) {
+                    for( const auto &rect : active_hit_rects.shift_up ) {
                         if( rect.first.contains( cell ) ) {
                             active_header = 1;
                             cursel[1] = rect.second;
-                            mman_ui->try_shift( '-', cursel[1], active_mod_order );
+                            mman_ui->try_shift( '+', cursel[1], active_mod_order );
                             hit_control = true;
                             break;
+                        }
+                    }
+                    if( !hit_control ) {
+                        for( const auto &rect : active_hit_rects.shift_down ) {
+                            if( rect.first.contains( cell ) ) {
+                                active_header = 1;
+                                cursel[1] = rect.second;
+                                mman_ui->try_shift( '-', cursel[1], active_mod_order );
+                                hit_control = true;
+                                break;
+                            }
                         }
                     }
                 }
