@@ -2982,7 +2982,9 @@ void panel_manager::show_adm()
         ui_manager::redraw();
 
         const std::string action = ctxt.handle_input();
-        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+        if( action == "SELECT" ) {
+            // Focus changes are explicit clicks; hovering must not move the cursor
+            // (rows shift under the pointer while reordering with swap mode).
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             bool hit = false;
             for( const auto &row_hit : panel_row_hits ) {
