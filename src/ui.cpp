@@ -1130,11 +1130,19 @@ void uilist::query( bool loop, int timeout )
                 }
             }
         } else if( ret_act == "SELECT" ) {
-            // Click: activate the hovered row, honouring the same enable rules
-            // as the keyboard path.
-            if( !fentries.empty() && selected >= 0 &&
-                ( entries[selected].enabled || allow_disabled ) ) {
-                ret = entries[selected].retval;
+            // Click: activate the row the click actually landed on. Clicking the
+            // border or outside the window must not activate the highlighted row.
+            const point cell = mouse_pixel_to_cell( event.mouse_pos );
+            for( size_t i = 0; i < fentries.size(); ++i ) {
+                const auto &entry = entries[fentries[i]];
+                if( entry.drawn_rect && entry.drawn_rect->contains( cell ) ) {
+                    fselected = static_cast<int>( i );
+                    selected = fentries[i];
+                    if( selected >= 0 && ( entries[selected].enabled || allow_disabled ) ) {
+                        ret = entries[selected].retval;
+                    }
+                    break;
+                }
             }
         } else if( scrollby( scroll_amount_from_action( ret_act ) ) ) {
             /* nothing */
