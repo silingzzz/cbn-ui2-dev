@@ -1961,9 +1961,18 @@ tab_direction set_bionics( avatar &u, points_left &points )
 #endif
 
 
+    // Mouse: rows of the bionic columns, with the column and row they map to.
+    struct bionic_row_hit {
+        inclusive_rectangle<point> rect;
+        int page;
+        int line;
+    };
+    std::vector<bionic_row_hit> bionic_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
         werase( w_description );
+        bionic_row_hits.clear();
 
         draw_character_tabs( w, _( "BIONICS" ), u.prof );
 
@@ -2056,6 +2065,11 @@ tab_direction set_bionics( avatar &u, points_left &points )
                 int cur_y = 5 + i - start;
                 int cur_x = 2 + iCurrentPage * page_width;
                 mvwprintz( w, point( cur_x, cur_y ), col, utf8_truncate( bio.name.translated(), page_width - 2 ) );
+                bionic_row_hits.emplace_back( bionic_row_hit{
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + cur_x, getbegy( w ) + cur_y ),
+                        point( getbegx( w ) + cur_x + page_width - 2, getbegy( w ) + cur_y ) ),
+                    iCurrentPage, i } );
             }
 
             draw_scrollbar( w, iCurrentLine[iCurrentPage], iContentHeight, bionics_size[iCurrentPage],
@@ -2074,9 +2088,22 @@ tab_direction set_bionics( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const bionic_row_hit &hit : bionic_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    iCurWorkingPage = hit.page;
+                    iCurrentLine[hit.page] = hit.line;
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
         }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
@@ -2396,8 +2423,16 @@ tab_direction set_profession( avatar &u, points_left &points,
 
     int iheight = 0;
 
+    // Mouse: profession rows, with the index they map to.
+    struct profession_row_hit {
+        inclusive_rectangle<point> rect;
+        int line;
+    };
+    std::vector<profession_row_hit> profession_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
+        profession_row_hits.clear();
         draw_character_tabs( w, _( "PROFESSION" ), u.prof );
 
         // Draw filter indicator
@@ -2465,6 +2500,12 @@ tab_direction set_profession( avatar &u, points_left &points,
             }
             mvwprintz( w, point( 2, 5 + i - iStartPos ), col,
                        sorted_profs[i]->gender_appropriate_name( u.male ) );
+            profession_row_hits.emplace_back( profession_row_hit{
+                inclusive_rectangle<point>(
+                    point( getbegx( w ) + 2, getbegy( w ) + 5 + i - iStartPos ),
+                    point( getbegx( w ) + 2 + utf8_width( sorted_profs[i]->gender_appropriate_name( u.male ) ),
+                           getbegy( w ) + 5 + i - iStartPos ) ),
+                i } );
         }
         //Clear rest of space in case stuff got filtered out
         for( ; i < iStartPos + iContentHeight; ++i ) {
@@ -2707,9 +2748,21 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const profession_row_hit &hit : profession_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    cur_id = hit.line;
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
         }
         if( action == "DOWN" ) {
             cur_id++;
@@ -3352,8 +3405,16 @@ tab_direction set_scenario( avatar &u, points_left &points,
         points.skill_points += u.prof->point_cost();
     }
 
+    // Mouse: scenario rows, with the index they map to.
+    struct scenario_row_hit {
+        inclusive_rectangle<point> rect;
+        int line;
+    };
+    std::vector<scenario_row_hit> scenario_row_hits;
+
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w );
+        scenario_row_hits.clear();
         draw_character_tabs( w, _( "SCENARIO" ), u.prof );
 
         // Draw filter indicator
@@ -3440,6 +3501,12 @@ tab_direction set_scenario( avatar &u, points_left &points,
             }
             mvwprintz( w, point( 2, 5 + i - iStartPos ), col,
                        sorted_scens[i]->gender_appropriate_name( u.male ) );
+            scenario_row_hits.emplace_back( scenario_row_hit{
+                inclusive_rectangle<point>(
+                    point( getbegx( w ) + 2, getbegy( w ) + 5 + i - iStartPos ),
+                    point( getbegx( w ) + 2 + utf8_width( sorted_scens[i]->gender_appropriate_name( u.male ) ),
+                           getbegy( w ) + 5 + i - iStartPos ) ),
+                i } );
 
         }
         //Clear rest of space in case stuff got filtered out
@@ -3600,9 +3667,21 @@ tab_direction set_scenario( avatar &u, points_left &points,
         }
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const scenario_row_hit &hit : scenario_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    cur_id = hit.line;
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
         }
         if( action == "DOWN" ) {
             cur_id++;
