@@ -11521,7 +11521,14 @@ game::vmenu_ret game::list_items( const std::vector<map_item_stack> &item_list )
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             for( const auto &hit : vmenu_item_row_hits ) {
                 if( hit.first.contains( cell ) ) {
-                    iActive = hit.second;
+                    if( hit.second != iActive ) {
+                        // Same reset as the keyboard UP/DOWN path: the per-item page
+                        // index is meaningless for a different stack.
+                        iActive = hit.second;
+                        iScrollPos = 0;
+                        page_num = 0;
+                        recalc_unread = highlight_unread_items;
+                    }
                     update_active_item();
                     if( action == "SELECT" ) {
                         action = "EXAMINE";
