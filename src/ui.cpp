@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cctype>
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include <iterator>
 #include <memory>
@@ -14,6 +15,7 @@
 #include "debug.h"
 #include "game.h"
 #include "ime.h"
+#include "cursesport.h"
 #include "input.h"
 #include "output.h"
 #include "player.h"
@@ -26,6 +28,12 @@
 
 #include "options.h"
 #endif
+
+static auto SDL_getenv2_hover_debug() -> bool
+{
+    static const bool on = std::getenv( "CBN_HOVER_DEBUG" ) != nullptr;
+    return on;
+}
 
 catacurses::window new_centered_win( int nlines, int ncols )
 {
@@ -1084,11 +1092,38 @@ void uilist::query( bool loop, int timeout )
         const auto iter = keymap.find( keypress );
 
         if( ret_act == "MOUSE_MOVE" ) {
+            // TEMP DEBUG (env gated): find out what coordinate space the mouse
+            // event uses versus the rectangles recorded while drawing.
+            if( SDL_getenv2_hover_debug() ) {
+                std::fprintf( stderr, "HOVER ret=%s mouse=(%d,%d) win=(%d,%d) w=%d",
+                              ret_act.c_str(), event.mouse_pos.x, event.mouse_pos.y,
+                              getbegx( window ), getbegy( window ), w_width );
+                for( size_t i = 0; i < fentries.size() && i < 4; ++i ) {
+                    const auto &e = entries[fentries[i]];
+                    if( e.drawn_rect ) {
+                        std::fprintf( stderr, " rect%zu=[%d,%d..%d,%d]", i,
+                                      e.drawn_rect->p_min.x, e.drawn_rect->p_min.y,
+                                      e.drawn_rect->p_max.x, e.drawn_rect->p_max.y );
+                    }
+                }
+                std::fprintf( stderr, "\n" );
+                std::fflush( stderr );
+            }
             // Hover: highlight the entry under the cursor so a following click
             // acts on the row the player is pointing at.
             for( size_t i = 0; i < fentries.size(); ++i ) {
                 const auto &entry = entries[fentries[i]];
-                if( entry.drawn_rect && entry.drawn_rect->contains( event.mouse_pos ) ) {
+                // input_event::mouse_pos is in screen pixels, while drawn_rect is
+                // in terminal cells; convert before hit testing.
+                const auto cell_w = std::max( 1, projected_window_width() / TERMX / get_scaling_factor() );
+                const auto cell_h = std::max( 1, projected_window_height() / TERMY / get_scaling_factor() );
+                const point cell( event.mouse_pos.x / cell_w, event.mouse_pos.y / cell_h );
+                if( SDL_getenv2_hover_debug() ) {
+                    std::fprintf( stderr, "HOVER-HIT i=%zu cell=(%d,%d) cellwh=(%d,%d)\n", i, cell.x, cell.y,
+                                  cell_w, cell_h );
+                    std::fflush( stderr );
+                }
+                if( entry.drawn_rect && entry.drawn_rect->contains( cell ) ) {
                     if( static_cast<int>( i ) != fselected ) {
                         fselected = static_cast<int>( i );
                         selected = fentries[i];
