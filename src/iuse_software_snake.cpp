@@ -1,6 +1,7 @@
 #include "iuse_software_snake.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -11,6 +12,7 @@
 #include "catacharset.h"  // utf8_width()
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "input.h"
 #include "output.h"
 #include "point.h"
@@ -126,6 +128,8 @@ int snake_game::start_game()
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click near the head to steer towards the click.
+    ctxt.register_action( "SELECT" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         werase( w_snake );
@@ -206,7 +210,36 @@ int snake_game::start_game()
 
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input( iGameSpeed );
+        const std::string action_in = ctxt.handle_input( iGameSpeed );
+        std::string action = action_in;
+
+        if( action == "SELECT" ) {
+            // Mouse: steer towards the clicked cell (dominant axis, no reversals).
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point rel = cell - point( getbegx( w_snake ), getbegy( w_snake ) );
+            if( !vSnakeBody.empty() ) {
+                const point head( vSnakeBody.back().second, vSnakeBody.back().first );
+                const point d = rel - head;
+                if( std::abs( d.x ) >= std::abs( d.y ) ) {
+                    if( d.x > 0 && iDirX != -1 ) {
+                        iDirY = 0;
+                        iDirX = 1;
+                    } else if( d.x < 0 && iDirX != 1 ) {
+                        iDirY = 0;
+                        iDirX = -1;
+                    }
+                } else {
+                    if( d.y > 0 && iDirY != -1 ) {
+                        iDirY = 1;
+                        iDirX = 0;
+                    } else if( d.y < 0 && iDirY != 1 ) {
+                        iDirY = -1;
+                        iDirX = 0;
+                    }
+                }
+            }
+            continue;
+        }
 
         if( action == "UP" ) {
             if( iDirY != 1 ) {
