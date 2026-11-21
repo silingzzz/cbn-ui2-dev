@@ -404,6 +404,10 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                 }
             }
             if( row_hit || evt.type == input_event_t::mouse ) {
+                if( row_hit && menu_mode == mutation_menu_mode::examining ) {
+                    // Keep the description panel in step with the mouse-selected row.
+                    examine_id = GetTrait( active, passive, cursor, tab_mode );
+                }
                 continue;
             }
         }
