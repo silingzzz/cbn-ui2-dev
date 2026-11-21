@@ -3281,6 +3281,14 @@ static void CheckMessages()
 
     while( SDL_PollEvent( &ev ) ) {
         if( cata_imgui::process_event( ev ) ) {
+            // If the overlay swallows a release, the matching press latched in
+            // mouse_button_owner must still be cleared, otherwise a press that the
+            // game saw and a release that ImGui took leave the slot stuck on
+            // MOUSE_OWNER_GAME and the next click is silently dropped.
+            if( ev.type == SDL_EVENT_MOUSE_BUTTON_UP ) {
+                const size_t btn = ev.button.button < 8 ? ev.button.button : 0;
+                mouse_button_owner[btn] = MOUSE_OWNER_NONE;
+            }
             continue;
         }
         switch( ev.type ) {
