@@ -46,6 +46,8 @@ void game::list_missions()
 
     // Screen rectangles of the mission rows drawn last frame, for mouse input.
     std::vector<std::pair<inclusive_rectangle<point>, size_t>> mission_rects;
+    // Screen rectangles of the tab labels drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> mission_tab_rects;
 
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
@@ -72,12 +74,11 @@ void game::list_missions()
             mvwputch( w_missions, point( 30, i ), BORDER_COLOR, LINE_XOXO );
         }
 
-        const std::vector<std::pair<tab_mode, std::string>> tabs = {
-            { tab_mode::TAB_ACTIVE, _( "ACTIVE MISSIONS" ) },
-            { tab_mode::TAB_COMPLETED, _( "COMPLETED MISSIONS" ) },
-            { tab_mode::TAB_FAILED, _( "FAILED MISSIONS" ) },
+        const std::vector<std::string> tab_texts = {
+            _( "ACTIVE MISSIONS" ), _( "COMPLETED MISSIONS" ), _( "FAILED MISSIONS" )
         };
-        draw_tabs( w_missions, tabs, tab );
+        draw_tabs( w_missions, tab_texts, static_cast<size_t>( tab ) );
+        mission_tab_rects = tab_rects( w_missions, tab_texts, static_cast<size_t>( tab ) );
         draw_border_below_tabs( w_missions );
 
         mvwputch( w_missions, point( 30, 2 ), BORDER_COLOR,
@@ -199,14 +200,25 @@ void game::list_missions()
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
-            for( const auto &rect : mission_rects ) {
+            bool hit_tab = false;
+            for( const auto &rect : mission_tab_rects ) {
                 if( rect.first.contains( cell ) ) {
-                    selection = rect.second;
+                    tab = static_cast<tab_mode>( static_cast<int>( rect.second ) );
+                    selection = 0;
+                    hit_tab = true;
                     break;
                 }
             }
-            if( action == "SELECT" ) {
-                action = "CONFIRM";
+            if( !hit_tab ) {
+                for( const auto &rect : mission_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        selection = rect.second;
+                        break;
+                    }
+                }
+                if( action == "SELECT" ) {
+                    action = "CONFIRM";
+                }
             }
         }
         if( action == "RIGHT" ) {

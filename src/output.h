@@ -15,6 +15,7 @@
 
 #include "catacharset.h"
 #include "color.h"
+#include "cuboid_rectangle.h"
 #include "debug.h"
 #include "enums.h"
 #include "line.h"
@@ -770,6 +771,12 @@ void draw_tabs( const catacurses::window &, const std::vector<std::string> &tab_
 // As above, but specify current tab by its label rather than position
 void draw_tabs( const catacurses::window &, const std::vector<std::string> &tab_texts,
                 const std::string &current_tab, int max_tab_width = -1 );
+
+// Screen rectangles (the two label rows of each tab) of the tabs draw_tabs would
+// draw with the same arguments, paired with the tab's index. Use for mouse input.
+auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                size_t current_tab, int max_tab_width = -1 )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>;
 
 // This overload of draw_tabs is intended for use when you track the current
 // tab via some other value (like an enum) linked to each tab.  Expected use

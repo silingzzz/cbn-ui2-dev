@@ -641,6 +641,8 @@ void faction_manager::display() const
     size_t selection = 0;
     // Screen rectangles of the rows drawn last frame, for mouse input.
     std::vector<std::pair<inclusive_rectangle<point>, size_t>> faction_rects;
+    // Screen rectangles of the tab labels drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> faction_tab_rects;
     input_context ctxt( "FACTION MANAGER" );
     ctxt.register_cardinal();
     ctxt.register_updown();
@@ -683,13 +685,11 @@ void faction_manager::display() const
             mvwputch( w_missions, point( 30, i ), BORDER_COLOR, LINE_XOXO );
         }
 
-        const std::vector<std::pair<tab_mode, std::string>> tabs = {
-            { tab_mode::TAB_FOLLOWERS, _( "YOUR FOLLOWERS" ) },
-            { tab_mode::TAB_OTHERFACTIONS, _( "OTHER FACTIONS" ) },
-            { tab_mode::TAB_LORE, _( "LORE" ) },
-            { tab_mode::TAB_CREATURES, _( "CREATURES" ) },
+        const std::vector<std::string> tab_texts = {
+            _( "YOUR FOLLOWERS" ), _( "OTHER FACTIONS" ), _( "LORE" ), _( "CREATURES" )
         };
-        draw_tabs( w_missions, tabs, tab );
+        draw_tabs( w_missions, tab_texts, static_cast<size_t>( tab ) );
+        faction_tab_rects = tab_rects( w_missions, tab_texts, static_cast<size_t>( tab ) );
         draw_border_below_tabs( w_missions );
 
         mvwputch( w_missions, point( 30, 2 ), BORDER_COLOR,
@@ -889,14 +889,25 @@ void faction_manager::display() const
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
-            for( const auto &rect : faction_rects ) {
+            bool hit_tab = false;
+            for( const auto &rect : faction_tab_rects ) {
                 if( rect.first.contains( cell ) ) {
-                    selection = rect.second;
+                    tab = static_cast<tab_mode>( static_cast<int>( rect.second ) );
+                    selection = 0;
+                    hit_tab = true;
                     break;
                 }
             }
-            if( action == "SELECT" ) {
-                action = "CONFIRM";
+            if( !hit_tab ) {
+                for( const auto &rect : faction_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        selection = rect.second;
+                        break;
+                    }
+                }
+                if( action == "SELECT" ) {
+                    action = "CONFIRM";
+                }
             }
         }
         if( action == "NEXT_TAB" || action == "RIGHT" ) {

@@ -1320,8 +1320,17 @@ void draw_subtab( const catacurses::window &w, int iOffsetX, const std::string &
     }
 }
 
-void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab_texts,
-                size_t current_tab, int max_tab_width )
+namespace
+{
+struct tab_slot {
+    int x;
+    size_t index;
+};
+
+/// Computes where draw_tabs places each visible tab, so drawing and hit testing
+/// can never disagree about the layout.
+auto layout_tabs( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                  size_t current_tab, int max_tab_width ) -> std::vector<tab_slot>
 {
     const int tab_step = 3;
     if( max_tab_width == -1 ) {
@@ -1338,7 +1347,6 @@ void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab
     }
     int start = 0;
     calcStartPos( start, current, max_tab_width, total_used_width );
-    int width = getmaxx( w );
     current = 0;
     int start_i = 0;
     if( start != 0 ) {
@@ -1351,6 +1359,24 @@ void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab
             }
         }
     }
+    std::vector<tab_slot> slots;
+    int x = 2;
+    for( size_t i = start_i; i < tab_texts.size(); ++i ) {
+        const std::string &tab_text = tab_texts[i];
+        const int newx = x + utf8_width( tab_text ) + tab_step;
+        if( newx <= max_tab_width ) {
+            slots.push_back( tab_slot{ x, i } );
+        }
+        x = newx;
+    }
+    return slots;
+}
+} // namespace
+
+void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                size_t current_tab, int max_tab_width )
+{
+    const int width = getmaxx( w );
     for( int i = 0; i < width; i++ ) {
         mvwputch( w, point( i, 2 ), BORDER_COLOR, LINE_OXOX ); // -
     }
@@ -1358,15 +1384,23 @@ void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab
     mvwputch( w, point( 0, 2 ), BORDER_COLOR, LINE_OXXO ); // |^
     mvwputch( w, point( width - 1, 2 ), BORDER_COLOR, LINE_OOXX ); // ^|
 
-    int x = 2;
-    for( size_t i = start_i; i < tab_texts.size(); ++i ) {
-        const std::string &tab_text = tab_texts[i];
-        int newx = x + utf8_width( tab_text ) + tab_step;
-        if( newx <= max_tab_width ) {
-            draw_tab( w, x, tab_text, i == current_tab );
-        }
-        x = newx;
+    for( const tab_slot &slot : layout_tabs( w, tab_texts, current_tab, max_tab_width ) ) {
+        draw_tab( w, slot.x, tab_texts[slot.index], slot.index == current_tab );
     }
+}
+
+auto tab_rects( const catacurses::window &w, const std::vector<std::string> &tab_texts,
+                size_t current_tab, int max_tab_width )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>
+{
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> rects;
+    const auto origin = point( getbegx( w ), getbegy( w ) );
+    for( const tab_slot &slot : layout_tabs( w, tab_texts, current_tab, max_tab_width ) ) {
+        const int x_right = slot.x + utf8_width( tab_texts[slot.index] ) + 1;
+        rects.emplace_back( inclusive_rectangle<point>( origin + point( slot.x, 0 ),
+                           origin + point( x_right, 1 ) ), slot.index );
+    }
+    return rects;
 }
 
 void draw_tabs( const catacurses::window &w, const std::vector<std::string> &tab_texts,

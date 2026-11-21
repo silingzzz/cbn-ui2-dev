@@ -352,16 +352,18 @@ static std::string build_bionic_powerdesc_string( const bionic &bio )
     return power_desc;
 }
 
-static void draw_bionics_tabs( const catacurses::window &win, const size_t active_num,
+static auto draw_bionics_tabs( const catacurses::window &win, const size_t active_num,
                                const size_t passive_num, const bionic_tab_mode current_mode )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>
 {
     werase( win );
 
-    const std::vector<std::pair<bionic_tab_mode, std::string>> tabs = {
-        { bionic_tab_mode::TAB_ACTIVE, string_format( _( "ACTIVE (%i)" ), active_num ) },
-        { bionic_tab_mode::TAB_PASSIVE, string_format( _( "PASSIVE (%i)" ), passive_num ) },
+    const std::vector<std::string> tab_texts = {
+        string_format( _( "ACTIVE (%i)" ), active_num ),
+        string_format( _( "PASSIVE (%i)" ), passive_num )
     };
-    draw_tabs( win, tabs, current_mode );
+    draw_tabs( win, tab_texts, static_cast<size_t>( current_mode ) );
+    auto tab_hit_rects = tab_rects( win, tab_texts, static_cast<size_t>( current_mode ) );
 
     // Draw symbols to connect additional lines to border
     int width = getmaxx( win );
@@ -378,6 +380,7 @@ static void draw_bionics_tabs( const catacurses::window &win, const size_t activ
     mvwputch( win, point( width - 1, height - 1 ), BORDER_COLOR, LINE_XOXX );
 
     wnoutrefresh( win );
+    return tab_hit_rects;
 }
 
 static void draw_description( const catacurses::window &win, const bionic &bio,
@@ -634,6 +637,8 @@ void show_bionics_ui( Character &who )
     int cursor = 0;
     // Screen rectangles of the bionic rows drawn last frame, for mouse input.
     std::vector<std::pair<inclusive_rectangle<point>, int>> bionic_rects;
+    // Screen rectangles of the tab labels drawn last frame, for mouse input.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> bionic_tab_rects;
 
     //generate the tab title string and a count of the bionics owned
     bionic_menu_mode menu_mode = ACTIVATING;
@@ -659,6 +664,7 @@ void show_bionics_ui( Character &who )
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         bionic_rects.clear();
+        bionic_tab_rects.clear();
         if( hide ) {
             return;
         }
@@ -734,7 +740,7 @@ void show_bionics_ui( Character &who )
         draw_scrollbar( wBio, cursor, LIST_HEIGHT, current_bionic_list->size(), point( 0, list_start_y ) );
 
         wnoutrefresh( wBio );
-        draw_bionics_tabs( w_tabs, active.size(), passive.size(), tab_mode );
+        bionic_tab_rects = draw_bionics_tabs( w_tabs, active.size(), passive.size(), tab_mode );
 
         draw_bionics_titlebar( w_title, &who, menu_mode );
         if( menu_mode == EXAMINING && !current_bionic_list->empty() ) {
@@ -762,14 +768,26 @@ void show_bionics_ui( Character &who )
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
-            for( const auto &rect : bionic_rects ) {
+            bool hit_tab = false;
+            for( const auto &rect : bionic_tab_rects ) {
                 if( rect.first.contains( cell ) ) {
-                    cursor = rect.second;
+                    tab_mode = static_cast<bionic_tab_mode>( rect.second );
+                    cursor = 0;
+                    scroll_position = 0;
+                    hit_tab = true;
                     break;
                 }
             }
-            if( action == "SELECT" ) {
-                action = "CONFIRM";
+            if( !hit_tab ) {
+                for( const auto &rect : bionic_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        cursor = rect.second;
+                        break;
+                    }
+                }
+                if( action == "SELECT" ) {
+                    action = "CONFIRM";
+                }
             }
         }
         const int ch = ctxt.get_raw_input().get_first_input();
