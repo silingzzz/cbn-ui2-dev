@@ -32,6 +32,7 @@
 #include "character_martial_arts.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "enchantments/enchantment.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
@@ -575,6 +576,28 @@ void avatar::randomize_cosmetics()
     } );
 }
 
+namespace
+{
+/// Tab clicked in the previous character creation tab, applied by avatar::create.
+int requested_character_tab = -1;
+/// Screen rectangles of the character creation tab bar drawn last frame.
+std::vector<std::pair<inclusive_rectangle<point>, size_t>> character_tab_rects;
+
+/// True if the pending mouse input is a click on the character creation tab bar.
+/// Records the requested tab for avatar::create.
+auto character_tab_clicked( input_context &ctxt ) -> bool
+{
+    const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+    for( const auto &rect : character_tab_rects ) {
+        if( rect.first.contains( cell ) ) {
+            requested_character_tab = static_cast<int>( rect.second );
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
 bool avatar::create( character_type type, const std::string &tempname )
 {
     // TODO: This block should not be needed
@@ -721,6 +744,15 @@ bool avatar::create( character_type type, const std::string &tempname )
                 break;
         }
 
+        // A tab bar click asks for a specific tab instead of stepping one by one.
+        if( requested_character_tab >= 0 ) {
+            const int requested = requested_character_tab;
+            requested_character_tab = -1;
+            if( tab >= 0 && requested <= get_max_tabs( prof ) ) {
+                tab = requested;
+            }
+        }
+
         if( !( tab >= 0 && tab <= get_max_tabs( prof ) ) ) {
             if( tab != -1 && nameExists( name ) ) {
                 tab = get_max_tabs( prof );
@@ -851,8 +883,9 @@ bool avatar::create( character_type type, const std::string &tempname )
     return true;
 }
 
-static void draw_character_tabs( const catacurses::window &w, const std::string &sTab,
+static auto draw_character_tabs( const catacurses::window &w, const std::string &sTab,
                                  const profession_id &prof )
+    -> std::vector<std::pair<inclusive_rectangle<point>, size_t>>
 {
     std::vector<std::string> tab_captions = {
         _( "POINTS" ),
@@ -879,6 +912,12 @@ static void draw_character_tabs( const catacurses::window &w, const std::string 
     }
     mvwputch( w, point( 0, 4 ), BORDER_COLOR, LINE_XXXO ); // |-
     mvwputch( w, point( TERMX - 1, 4 ), BORDER_COLOR, LINE_XOXX ); // -|
+
+    auto tab_it = std::ranges::find( tab_captions, sTab );
+    const auto current_tab = tab_it == tab_captions.end() ?
+                             size_t{ 0 } : static_cast<size_t>( std::distance( tab_captions.begin(), tab_it ) );
+    character_tab_rects = tab_rects( w, tab_captions, current_tab );
+    return character_tab_rects;
 }
 static void draw_points( const catacurses::window &w, points_left &points, int netPointCost = 0 )
 {
@@ -929,6 +968,9 @@ tab_direction set_points( avatar &u, points_left &points )
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "CONFIRM" );
+    // Mouse: hover selects an option, click confirms it; tab bar switches tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     const std::string point_pool = get_option<std::string>( "CHARACTER_POINT_POOLS" );
 
@@ -956,8 +998,11 @@ tab_direction set_points( avatar &u, points_left &points )
     }
 
     int highlighted = 0;
+    // Mouse hit areas recorded while drawing, consumed by the next input event.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> option_hit_rects;
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        option_hit_rects.clear();
         draw_character_tabs( w, _( "POINTS" ), u.prof );
 
         const auto &cur_opt = opts[highlighted];
@@ -973,6 +1018,10 @@ tab_direction set_points( avatar &u, points_left &points )
                 color = hilite( color );
             }
             mvwprintz( w, point( 2, 5 + i ), color, std::get<1>( opts[i] ) );
+            option_hit_rects.emplace_back(
+                inclusive_rectangle<point>( point( getbegx( w ) + 2, getbegy( w ) + 5 + i ),
+                                            point( getbegx( w ) + 2 + utf8_width( std::get<1>( opts[i] ) ),
+                                                    getbegy( w ) + 5 + i ) ), static_cast<size_t>( i ) );
         }
 
         fold_and_print( w_description, point_zero, getmaxx( w_description ),
@@ -989,7 +1038,22 @@ tab_direction set_points( avatar &u, points_left &points )
             highlighted = 0;
         }
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &rect : option_hit_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    highlighted = static_cast<int>( rect.second );
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
+        }
         if( action == "DOWN" ) {
             highlighted++;
         } else if( action == "UP" ) {
@@ -1022,6 +1086,9 @@ tab_direction set_stats( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     ui_adaptor ui;
     catacurses::window w;
@@ -1174,6 +1241,9 @@ tab_direction set_stats( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
         if( action == "DOWN" ) {
             if( sel < 4 ) {
                 sel++;
@@ -1410,6 +1480,9 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "REROLL_APPEARANCE" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 #if defined(TILES)
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
@@ -1531,6 +1604,9 @@ tab_direction set_traits( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
@@ -1849,6 +1925,9 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "REROLL_APPEARANCE" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 #if defined(TILES)
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
@@ -1970,6 +2049,9 @@ tab_direction set_bionics( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
@@ -2273,6 +2355,9 @@ tab_direction set_profession( avatar &u, points_left &points,
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     bool recalc_profs = true;
     int profs_length = 0;
@@ -2597,6 +2682,9 @@ tab_direction set_profession( avatar &u, points_left &points,
 
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
         if( action == "DOWN" ) {
             cur_id++;
             if( cur_id > profs_length - 1 ) {
@@ -2731,6 +2819,9 @@ tab_direction set_skills( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     std::map<skill_id, int> prof_skills;
     const auto &pskills = u.prof->skills();
@@ -2890,6 +2981,9 @@ tab_direction set_skills( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
@@ -2994,6 +3088,9 @@ tab_direction set_magic( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     const int remaining_points_length = utf8_width( points.to_string(), true );
 
@@ -3088,6 +3185,9 @@ tab_direction set_magic( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_spells );
             current_spell = spell_list[cur_pos].first;
@@ -3213,6 +3313,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     bool recalc_scens = true;
     int scens_length = 0;
@@ -3472,6 +3575,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
 
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
         if( action == "DOWN" ) {
             cur_id++;
             if( cur_id > scens_length - 1 ) {
@@ -3640,6 +3746,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
+    // Mouse: click the tab bar to switch tabs.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 #if defined(TILES)
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
@@ -4115,6 +4224,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         you.set_base_age( clamp( you.base_age(), min_allowed_age, max_allowed_age ) );
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
+        if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
+            return tab_direction::NONE;
+        }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
