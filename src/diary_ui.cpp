@@ -348,8 +348,8 @@ void diary::show_diary_ui( diary *c_diary )
         ui_manager::redraw_invalidated();
         const std::string action_in = ctxt.handle_input();
         std::string action = action_in;
-        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
-            // Mouse: clicking a row focuses that pane and selects the row.
+        if( action == "SELECT" ) {
+            // Selection is an explicit click: hovering must not flip the diary page.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             const auto hit_row = [&]( const std::vector<std::pair<inclusive_rectangle<point>, int>> &hits,
                                       const window_mode mode ) -> bool {
