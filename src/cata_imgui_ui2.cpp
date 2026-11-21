@@ -1,6 +1,7 @@
 #include "cata_imgui_ui2.h"
 #include "cata_imgui_ui2_lists.h"
 #include "cata_imgui_ui2_menu.h"
+#include "cata_imgui_ui2_focus.h"
 
 #if defined( TILES )
 
@@ -194,6 +195,8 @@ void draw()
     lists::draw();
     // PR-1.5 C batch: context menu, tooltip and toast feedback.
     menu::draw();
+    // PR-1.5 D batch: focus, keyboard and text input.
+    focus::draw();
 }
 
 } // namespace ui2

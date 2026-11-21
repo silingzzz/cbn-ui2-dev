@@ -500,6 +500,13 @@ auto process_event( const SDL_Event &event ) -> bool
     }
 }
 
+void clear_widget_focus()
+{
+    if( g_initialized && ImGui::GetCurrentContext() != nullptr ) {
+        ImGui::ClearActiveID();
+    }
+}
+
 void forget_key_ownership()
 {
     for( int8_t &owner : key_owner_table ) {

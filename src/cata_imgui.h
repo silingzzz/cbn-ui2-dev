@@ -48,6 +48,10 @@ auto want_capture_keyboard() -> bool;
 /// by the overlay before losing focus could stay "owned" and swallow its release.
 void forget_key_ownership();
 
+/// Drop the focused ImGui widget so the overlay releases keyboard focus
+/// (Esc / Enter-commit semantics for forms).
+void clear_widget_focus();
+
 /// Diagnostic counter (only active with CBN_IMGUI_TRACE set): count presented frames.
 void trace_present();
 
