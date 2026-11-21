@@ -1117,7 +1117,8 @@ void uilist::query( bool loop, int timeout )
                 // in terminal cells; convert before hit testing.
                 const point cell = mouse_pixel_to_cell( event.mouse_pos );
 
-                if( entry.drawn_rect && entry.drawn_rect->contains( cell ) ) {
+                if( entry.drawn_rect && entry.drawn_rect->contains( cell ) &&
+                    ( hilight_disabled || entry.enabled ) ) {
                     if( static_cast<int>( i ) != fselected ) {
                         fselected = static_cast<int>( i );
                         selected = fentries[i];
