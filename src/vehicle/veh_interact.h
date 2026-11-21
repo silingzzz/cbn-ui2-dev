@@ -2,6 +2,7 @@
 
 #include "color.h"
 #include "coordinates.h"
+#include "cuboid_rectangle.h"
 #include "cursesdef.h"
 #include "input.h"
 #include "inventory.h"
@@ -175,6 +176,15 @@ private:
     void display_name();
     void display_mode();
     void display_list(size_t pos, const std::vector<const vpart_info*>& list, int header = 0);
+
+    /// Mouse hit areas of the part list and its tab bar, recorded by display_list().
+    struct list_hit_areas {
+        /// Row rectangle -> index into the displayed list.
+        std::vector<std::pair<inclusive_rectangle<point>, size_t>> rows;
+        /// Tab rectangle -> index into install_info->tab_list.
+        std::vector<std::pair<inclusive_rectangle<point>, size_t>> tabs;
+    };
+    list_hit_areas list_hits;
     void display_details(const vpart_info* part);
 
     struct part_option {

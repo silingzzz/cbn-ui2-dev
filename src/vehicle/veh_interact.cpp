@@ -1015,6 +1015,42 @@ void veh_interact::do_install() {
 
         std::string action = main_context.handle_input();
 
+        // Mouse: click a tab to switch it, click a row to select (and install) that part.
+        if (action == "MOUSE_MOVE" || action == "SELECT") {
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            bool hit_tab = false;
+            for (const auto& hit : list_hits.tabs) {
+                if (hit.first.contains(cell)) {
+                    const auto new_tab = static_cast<size_t>(hit.second);
+                    if (new_tab != tab) {
+                        tab = new_tab;
+                        tab_vparts.clear();
+                        pos = 0;
+                        copy_if(can_mount.begin(), can_mount.end(), back_inserter(tab_vparts),
+                                tab_filters[tab]);
+                    }
+                    if (tab == 7) {
+                        action = "FILTER";
+                    }
+                    hit_tab = true;
+                    break;
+                }
+            }
+            if (!hit_tab) {
+                for (const auto& hit : list_hits.rows) {
+                    if (hit.first.contains(cell)) {
+                        pos = static_cast<int>(hit.second);
+                        if (action == "SELECT") {
+                            action = "CONFIRM";
+                        }
+                        break;
+                    }
+                }
+            } else if (tab != 7) {
+                continue;
+            }
+        }
+
         msg.reset();
         if (action == "FILTER") {
             string_input_popup()
@@ -2721,6 +2757,8 @@ void veh_interact::display_mode() {
 void veh_interact::display_list(
     size_t pos, const std::vector<const vpart_info*>& list, const int header) {
     werase(w_list);
+    list_hits.rows.clear();
+    list_hits.tabs.clear();
     int lines_per_page = page_size - header;
     size_t page = pos / lines_per_page;
     for (size_t i = page * lines_per_page; i < (page + 1) * lines_per_page && i < list.size();
@@ -2731,6 +2769,11 @@ void veh_interact::display_list(
         nc_color col = can_potentially_install(info) ? c_white : c_dark_gray;
         trim_and_print(
             w_list, point(3, y), getmaxx(w_list) - 3, pos == i ? hilite(col) : col, info.name());
+        list_hits.rows.emplace_back(
+            inclusive_rectangle<point>(
+                point(getbegx(w_list) + 1, getbegy(w_list) + y),
+                point(getbegx(w_list) + getmaxx(w_list) - 1, getbegy(w_list) + y)),
+            i);
     }
 
     if (install_info) {
@@ -2744,6 +2787,12 @@ void veh_interact::display_list(
                                                                                  // selected tab
             tab_x += (tab == i); // add a space before selected tab
             draw_subtab(w_list, tab_x, tab_name, tab == i, false);
+            list_hits.tabs.emplace_back(
+                inclusive_rectangle<point>(
+                    point(getbegx(w_list) + tab_x, getbegy(w_list) + 0),
+                    point(getbegx(w_list) + tab_x + utf8_width(tab_name) + 1,
+                          getbegy(w_list) + 0)),
+                i);
             tab_x += (1 + utf8_width(tab_name) + (tab == i)); // one space padding and add a space
                                                               // after selected tab
         }
