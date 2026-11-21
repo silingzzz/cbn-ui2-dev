@@ -1138,9 +1138,10 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
         ui_manager::redraw();
 
         auto action = ctxt.handle_input();
-        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+        if( action == "SELECT" ) {
             // Clicking a row focuses its pane and moves the cursor there; clicking
-            // the already focused row again toggles that trade entry.
+            // the already focused row again toggles that trade entry (same as
+            // LEFT/RIGHT). It must not map to CONFIRM: that accepts the whole deal.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             bool focused_elsewhere = false;
             for( const trade_row_hit &hit : trade_row_hits ) {
@@ -1148,14 +1149,33 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
                     continue;
                 }
                 const size_t current = hit.theirs ? them_cursor : you_cursor;
-                if( hit.theirs == focus_them && hit.index == current && action == "SELECT" ) {
-                    action = "CONFIRM";
+                if( hit.theirs == focus_them && hit.index == current ) {
+                    if( category_mode ) {
+                        break;
+                    }
+                    const auto &list = hit.theirs ? state.theirs : state.yours;
+                    const auto &flt = hit.theirs ? them_filtered : you_filtered;
+                    if( hit.index >= flt.size() ) {
+                        break;
+                    }
+                    const item_pricing &ip = list[flt[hit.index]];
+                    const int traded = ip.npc_has + ip.u_has + ip.npc_charges + ip.u_charges;
+                    action = traded > 0 ? "LEFT" : "RIGHT";
                 } else {
                     focus_them = hit.theirs;
                     if( hit.theirs ) {
                         them_cursor = hit.index;
                     } else {
                         you_cursor = hit.index;
+                    }
+                    auto &new_list = hit.theirs ? state.theirs : state.yours;
+                    auto &new_filtered = hit.theirs ? them_filtered : you_filtered;
+                    auto &new_cursor = hit.theirs ? them_cursor : you_cursor;
+                    auto &new_category_cursor = hit.theirs ? them_category_cursor : you_category_cursor;
+                    if( new_cursor < new_filtered.size() ) {
+                        sync_category_cursor( new_list, new_filtered,
+                                              build_category_ranges( new_list, new_filtered ),
+                                              new_category_cursor, new_cursor );
                     }
                     focused_elsewhere = true;
                 }
