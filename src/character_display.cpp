@@ -9,6 +9,7 @@
 #include "catacharset.h"
 #include "character_effects.h"
 #include "character_encumbrance.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "effect.h"
 #include "game.h"
@@ -1124,6 +1125,7 @@ static void draw_tip( const catacurses::window &w_tip, const Character &you,
 
 static bool handle_player_display_action( Character &you, unsigned int &line,
         player_display_tab &curtab, input_context &ctxt,
+        const std::array<catacurses::window, 6> &tab_windows,
         const ui_adaptor &ui_tip, const ui_adaptor &ui_info,
         const ui_adaptor &ui_stats, const ui_adaptor &ui_encumb,
         const ui_adaptor &ui_traits, const ui_adaptor &ui_bionics,
@@ -1193,6 +1195,35 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
 
     bool done = false;
     std::string action = ctxt.handle_input();
+
+    if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+        // Mouse: clicking a sub-panel makes it the current category.
+        const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+        const std::array<player_display_tab, 6> tab_order = {
+            player_display_tab::stats, player_display_tab::encumbrance, player_display_tab::traits,
+            player_display_tab::bionics, player_display_tab::effects, player_display_tab::skills
+        };
+        for( size_t i = 0; i < tab_windows.size(); i++ ) {
+            const catacurses::window &w = tab_windows[i];
+            if( !w ) {
+                continue;
+            }
+            const point beg( getbegx( w ), getbegy( w ) );
+            const point end( beg + point( getmaxx( w ), getmaxy( w ) ) );
+            if( cell.x < beg.x || cell.y < beg.y || cell.x >= end.x || cell.y >= end.y ) {
+                continue;
+            }
+            if( curtab != tab_order[i] ) {
+                line = 0;
+                invalidate_tab( curtab );
+                curtab = tab_order[i];
+                invalidate_tab( curtab );
+                ui_info.invalidate_ui();
+            }
+            break;
+        }
+        return false;
+    }
 
     if( action == "UP" ) {
         if( line > line_beg ) {
@@ -1469,6 +1500,9 @@ void character_display::disp_info( Character &ch )
     ctxt.register_action( "CHANGE_PROFESSION_NAME", to_translation( "Change profession name" ) );
     ctxt.register_action( "CHANGE_NAME", to_translation( "Change name" ) );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a sub-panel to switch to it.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     std::map<std::string, int> speed_effects;
     for( auto &elem : ch.get_all_effects() ) {
@@ -1702,7 +1736,9 @@ void character_display::disp_info( Character &ch )
     do {
         ui_manager::redraw_invalidated();
 
-        done = handle_player_display_action( ch, line, curtab, ctxt, ui_tip, ui_info,
+        const std::array<catacurses::window, 6> tab_windows = { w_stats_border, w_encumb_border,
+                w_traits_border, w_bionics_border, w_effects_border, w_skills_border };
+        done = handle_player_display_action( ch, line, curtab, ctxt, tab_windows, ui_tip, ui_info,
                                              ui_stats, ui_encumb, ui_traits, ui_bionics, ui_effects, ui_skills,
                                              traitslist, bionics_list, effect_name_and_text, skillslist );
     } while( !done );
