@@ -4,6 +4,7 @@
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "enums.h"
 #include "game.h"
@@ -474,7 +475,9 @@ void Messages::dialog::init_first_time()
     static auto actionnames = {
         "PAGE_UP", "PAGE_DOWN", "FILTER", "RESET_FILTER",
         "QUIT", "HELP_KEYBINDINGS", "TOGGLE_WIDE_DISPLAY", "TOGGLE_FULL_HEIGHT_DISPLAY",
-        "COPY_MESSAGE", "ERASE_HISTORY"
+        "COPY_MESSAGE", "ERASE_HISTORY",
+        // Mouse: wheel scrolls a few lines, a click on the log jumps to that position.
+        "SCROLL_UP", "SCROLL_DOWN", "SELECT"
     };
     for( const auto &actionname : actionnames ) {
         ctxt.register_action( actionname );
@@ -709,6 +712,25 @@ void Messages::dialog::input( const ui_adaptor &ui )
             ++offset;
         } else if( action == "UP" && offset > 0 ) {
             --offset;
+        } else if( action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
+            const size_t max_off = folded_filtered.size() > static_cast<size_t>( max_lines ) ?
+                                   folded_filtered.size() - max_lines : 0;
+            constexpr size_t wheel_step = 3;
+            if( action == "SCROLL_UP" ) {
+                offset = offset > wheel_step ? offset - wheel_step : 0;
+            } else {
+                offset = std::min( offset + wheel_step, max_off );
+            }
+        } else if( action == "SELECT" ) {
+            // Click inside the log area jumps to the corresponding scroll position.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const int rel = cell.y - getbegy( w ) - border_width;
+            if( rel >= 0 && rel < max_lines &&
+                folded_filtered.size() > static_cast<size_t>( max_lines ) ) {
+                const double fraction = static_cast<double>( rel ) /
+                                        std::max( 1, static_cast<int>( max_lines ) - 1 );
+                offset = static_cast<size_t>( ( folded_filtered.size() - max_lines ) * fraction );
+            }
         } else if( action == "PAGE_DOWN" ) {
             if( offset + max_lines * 2 <= folded_filtered.size() ) {
                 offset += max_lines;
