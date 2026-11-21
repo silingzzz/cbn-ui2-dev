@@ -298,6 +298,11 @@ class inventory_column
 
         void draw( const catacurses::window &win, point pos ) const;
 
+        /// Entry index under a screen cell position, or -1 when outside.
+        /// Uses the geometry recorded by the last draw() call, so mouse hit
+        /// testing always matches what the player actually sees.
+        auto row_at( const point &cell ) const -> int;
+
         void add_entry( const inventory_entry &entry );
         void move_entries_to( inventory_column &dest );
         void clear();
@@ -358,6 +363,11 @@ class inventory_column
         }
 
         void set_filter( const std::string &filter );
+
+        // Geometry of the last draw, for mouse hit testing.
+        mutable point last_drawn_at = point_zero;
+        mutable point last_drawn_size = point_zero;
+        mutable int last_drawn_rows = 0;
 
         std::vector<inventory_entry> entries;
         std::vector<inventory_entry> entries_hidden;

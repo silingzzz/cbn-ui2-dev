@@ -1,4 +1,5 @@
 #include "inventory_ui.h"
+#include "cursesport.h"
 
 #include "avatar.h"
 #include "cata_utility.h"
@@ -789,6 +790,19 @@ void inventory_column::on_input( const inventory_input &input )
     }
 }
 
+auto inventory_column::row_at( const point &cell ) const -> int
+{
+    if( !visible() || last_drawn_rows <= 0 ) {
+        return -1;
+    }
+    const point rel = cell - last_drawn_at;
+    if( rel.x < 0 || rel.x >= last_drawn_size.x || rel.y < 0 || rel.y >= last_drawn_rows ) {
+        return -1;
+    }
+    const size_t index = page_offset + static_cast<size_t>( rel.y );
+    return index < entries.size() ? static_cast<int>( index ) : -1;
+}
+
 void inventory_column::add_entry( const inventory_entry &entry )
 {
     if( std::find( entries.begin(), entries.end(), entry ) != entries.end() ) {
@@ -957,6 +971,12 @@ int inventory_column::reassign_custom_invlets( const player &p, int min_invlet, 
 
 void inventory_column::draw( const catacurses::window &win, point pos ) const
 {
+    last_drawn_at = point( getbegx( win ) + pos.x, getbegy( win ) + pos.y );
+    last_drawn_size = point( static_cast<int>( get_width() ),
+                             static_cast<int>( entries_per_page ) );
+    last_drawn_rows = static_cast<int>( std::min( entries_per_page,
+                        entries.size() > page_offset ? entries.size() - page_offset : 0 ) );
+
     if( !visible() ) {
         return;
     }
@@ -1978,6 +1998,9 @@ inventory_selector::inventory_selector( player &u, const inventory_selector_pres
     ctxt.register_action( "WIELD" );
     ctxt.register_action( "WEAR" );
     ctxt.register_action( "ANY_INPUT" ); // For invlets
+    // Mouse: hover highlights the entry under the cursor, click confirms it.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
 
     append_column( own_inv_column );
@@ -2004,8 +2027,27 @@ inventory_input inventory_selector::get_input()
     inventory_input res;
 
     res.action = ctxt.handle_input();
-    res.ch = ctxt.get_raw_input().get_first_input();
+    const input_event raw_input = ctxt.get_raw_input();
+    res.ch = raw_input.get_first_input();
     res.entry = find_entry_by_invlet( res.ch );
+
+    if( res.action == "MOUSE_MOVE" || res.action == "SELECT" ) {
+        const point cell = mouse_pixel_to_cell( raw_input.mouse_pos );
+        for( size_t i = 0; i < columns.size(); ++i ) {
+            const auto row = columns[i]->row_at( cell );
+            if( row < 0 ) {
+                continue;
+            }
+            if( !is_active_column( *columns[i] ) ) {
+                set_active_column( i );
+            }
+            columns[i]->select( static_cast<size_t>( row ), scroll_direction::FORWARD );
+            if( res.action == "SELECT" ) {
+                res.action = "CONFIRM";
+            }
+            break;
+        }
+    }
 
     if( res.entry != nullptr && !res.entry->is_selectable() ) {
         res.entry = nullptr;
