@@ -217,25 +217,44 @@ int snake_game::start_game()
             // Mouse: steer towards the clicked cell (dominant axis, no reversals).
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             const point rel = cell - point( getbegx( w_snake ), getbegy( w_snake ) );
+            if( rel.x < 0 || rel.y < 0 || rel.x >= getmaxx( w_snake ) ||
+                rel.y >= getmaxy( w_snake ) ) {
+                continue;
+            }
             if( !vSnakeBody.empty() ) {
                 const point head( vSnakeBody.back().second, vSnakeBody.back().first );
                 const point d = rel - head;
-                if( std::abs( d.x ) >= std::abs( d.y ) ) {
-                    if( d.x > 0 && iDirX != -1 ) {
-                        iDirY = 0;
-                        iDirX = 1;
-                    } else if( d.x < 0 && iDirX != 1 ) {
-                        iDirY = 0;
-                        iDirX = -1;
+                const auto try_turn = [&]( const bool horizontal, const point & delta ) -> bool {
+                    if( horizontal ) {
+                        if( delta.x > 0 && iDirX != -1 ) {
+                            iDirY = 0;
+                            iDirX = 1;
+                            return true;
+                        }
+                        if( delta.x < 0 && iDirX != 1 ) {
+                            iDirY = 0;
+                            iDirX = -1;
+                            return true;
+                        }
+                    } else {
+                        if( delta.y > 0 && iDirY != -1 ) {
+                            iDirY = 1;
+                            iDirX = 0;
+                            return true;
+                        }
+                        if( delta.y < 0 && iDirY != 1 ) {
+                            iDirY = -1;
+                            iDirX = 0;
+                            return true;
+                        }
                     }
-                } else {
-                    if( d.y > 0 && iDirY != -1 ) {
-                        iDirY = 1;
-                        iDirX = 0;
-                    } else if( d.y < 0 && iDirY != 1 ) {
-                        iDirY = -1;
-                        iDirX = 0;
-                    }
+                    return false;
+                };
+                // Try the dominant axis first, then the other one: a click straight
+                // behind the snake must still produce a legal side turn.
+                const bool horizontal_first = std::abs( d.x ) >= std::abs( d.y );
+                if( !try_turn( horizontal_first, d ) ) {
+                    try_turn( !horizontal_first, d );
                 }
             }
             continue;
