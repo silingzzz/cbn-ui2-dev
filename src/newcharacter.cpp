@@ -3941,6 +3941,19 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
 
     char_creation::description_selector current_selector = char_creation::NAME;
 
+    // Mouse: the editable description fields (name/height/age) and the two
+    // one-click controls (gender, starting location).
+    struct description_field_hit {
+        inclusive_rectangle<point> rect;
+        char_creation::description_selector selector;
+    };
+    struct description_action_hit {
+        inclusive_rectangle<point> rect;
+        std::string action;
+    };
+    std::vector<description_field_hit> description_field_hits;
+    std::vector<description_action_hit> description_action_hits;
+
     bool no_name_entered = false;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_character_tabs( w, _( "OVERVIEW" ), you.prof );
@@ -4358,6 +4371,19 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             character_preview.display();
         }
 #endif
+
+        description_field_hits.clear();
+        description_action_hits.clear();
+        const auto window_rect = []( const catacurses::window &win ) {
+            return inclusive_rectangle<point>(
+                       point( getbegx( win ), getbegy( win ) ),
+                       point( getbegx( win ) + getmaxx( win ) - 1, getbegy( win ) + getmaxy( win ) - 1 ) );
+        };
+        description_field_hits.push_back( { window_rect( w_name ), char_creation::NAME } );
+        description_field_hits.push_back( { window_rect( w_height ), char_creation::HEIGHT } );
+        description_field_hits.push_back( { window_rect( w_age ), char_creation::AGE } );
+        description_action_hits.push_back( { window_rect( w_gender ), "CHANGE_GENDER" } );
+        description_action_hits.push_back( { window_rect( w_location ), "CHOOSE_LOCATION" } );
     } );
 
     // do not switch IME mode now, but restore previous mode on return
@@ -4375,9 +4401,31 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         max_allowed_age = new_max_age;
         you.set_base_age( clamp( you.base_age(), min_allowed_age, max_allowed_age ) );
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         if( action == "SELECT" && character_tab_clicked( ctxt ) ) {
             return tab_direction::NONE;
+        }
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const description_field_hit &hit : description_field_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    current_selector = hit.selector;
+                    if( action == "SELECT" ) {
+                        action = "CONFIRM";
+                    }
+                    break;
+                }
+            }
+            if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+                for( const description_action_hit &hit : description_action_hits ) {
+                    if( hit.rect.contains( cell ) ) {
+                        if( action == "SELECT" ) {
+                            action = hit.action;
+                        }
+                        break;
+                    }
+                }
+            }
         }
 #if defined(TILES)
         if( action == "zoom_in" && use_character_preview ) {
