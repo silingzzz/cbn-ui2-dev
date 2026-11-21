@@ -203,13 +203,16 @@ void draw_perk_menu( Character &player )
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             bool hit_tab = false;
-            for( const auto &tab_hit : perk_tab_hits ) {
-                if( tab_hit.first.contains( cell ) ) {
-                    current_category = static_cast<int>( tab_hit.second );
-                    list_position = 0;
-                    info_position = 0;
-                    hit_tab = true;
-                    break;
+            // Switching category is an explicit click; hovering must not reset the list.
+            if( action == "SELECT" ) {
+                for( const auto &tab_hit : perk_tab_hits ) {
+                    if( tab_hit.first.contains( cell ) ) {
+                        current_category = static_cast<int>( tab_hit.second );
+                        list_position = 0;
+                        info_position = 0;
+                        hit_tab = true;
+                        break;
+                    }
                 }
             }
             if( !hit_tab ) {

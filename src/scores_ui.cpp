@@ -155,7 +155,8 @@ void show_scores_ui( const achievements_tracker &achievements, stats_tracker &st
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         new_tab = false;
-        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+        if( action == "SELECT" ) {
+            // Switching tabs is an explicit click; hovering must not swap the page.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             for( const auto &hit : tab_hit_rects ) {
                 if( hit.first.contains( cell ) ) {
