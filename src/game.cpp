@@ -10976,7 +10976,8 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
                 vmenu_vehicle_row_hits.emplace_back(
                     inclusive_rectangle<point>(
                         point( getbegx( w_vehicles ) + 1, getbegy( w_vehicles ) + y ),
-                        point( getbegx( w_vehicles ) + width - 1, getbegy( w_vehicles ) + y ) ),
+                        point( getbegx( w_vehicles ) + getmaxx( w_vehicles ) - 1,
+                               getbegy( w_vehicles ) + y ) ),
                     idx );
 
                 const int dist = entry.dist;
@@ -11899,7 +11900,8 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
                     vmenu_monster_row_hits.emplace_back(
                         inclusive_rectangle<point>(
                             point( getbegx( w_monsters ) + 1, getbegy( w_monsters ) + y ),
-                            point( getbegx( w_monsters ) + width - 1, getbegy( w_monsters ) + y ) ),
+                            point( getbegx( w_monsters ) + getmaxx( w_monsters ) - 1,
+                                   getbegy( w_monsters ) + y ) ),
                         iCurMon );
                     ++iCurMon;
                     if( critter->sees( g->u ) && player_knows ) {
