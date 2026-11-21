@@ -11784,6 +11784,12 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
         ctxt.register_action( "fire" );
     }
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover/click selects the monster row.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+
+    // Mouse hit areas of the visible monster rows, with the monster index.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> vmenu_monster_row_hits;
 
     // first integer is the row the attitude category string is printed in the menu
     std::map<int, Attitude> mSortCategory;
@@ -11814,6 +11820,7 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
                            _( "You don't see any monsters around you!" ) );
             } else {
                 werase( w_monsters );
+                vmenu_monster_row_hits.clear();
 
                 const int iNumMonster = monster_list.size();
                 const int iMenuSize = monster_list.size() + mSortCategory.size();
@@ -11861,6 +11868,11 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
                     // select current monster
                     const auto critter = monster_list[iCurMon];
                     const bool selected = iCurMon == iActive;
+                    vmenu_monster_row_hits.emplace_back(
+                        inclusive_rectangle<point>(
+                            point( getbegx( w_monsters ) + 1, getbegy( w_monsters ) + y ),
+                            point( getbegx( w_monsters ) + width - 1, getbegy( w_monsters ) + y ) ),
+                        iCurMon );
                     ++iCurMon;
                     if( critter->sees( g->u ) && player_knows ) {
                         mvwprintz( w_monsters, point( 0, y ), c_yellow, "!" );
@@ -12048,6 +12060,15 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
         ui_manager::redraw();
 
         action = ctxt.handle_input();
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &hit : vmenu_monster_row_hits ) {
+                if( hit.first.contains( cell ) ) {
+                    iActive = hit.second;
+                    break;
+                }
+            }
+        }
     } while( action != "QUIT" );
 
     u.view_offset = stored_view_offset;
