@@ -724,8 +724,10 @@ void Messages::dialog::input( const ui_adaptor &ui )
         } else if( action == "SELECT" ) {
             // Click inside the log area jumps to the corresponding scroll position.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const int rel_x = cell.x - getbegx( w );
             const int rel = cell.y - getbegy( w ) - border_width;
-            if( rel >= 0 && rel < max_lines &&
+            if( rel_x >= border_width && rel_x < getmaxx( w ) - border_width &&
+                rel >= 0 && rel < max_lines &&
                 folded_filtered.size() > static_cast<size_t>( max_lines ) ) {
                 const double fraction = static_cast<double>( rel ) /
                                         std::max( 1, static_cast<int>( max_lines ) - 1 );
