@@ -9,6 +9,7 @@
 #include "avatar.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
@@ -89,6 +90,8 @@ void user_interface::show()
     int iLine = 0;
     int iColumn = 1;
     int iStartPos = 0;
+    // Mouse hit areas of the rule rows, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         // Redraw the border
@@ -153,6 +156,7 @@ void user_interface::show()
         wnoutrefresh( w_header );
 
         // Clear the lines
+        row_hits.clear();
         for( int i = 0; i < iContentHeight; i++ ) {
             for( int j = 0; j < 79; j++ ) {
                 if( j == 4 || j == 50 || j == 60 ) {
@@ -190,6 +194,11 @@ void user_interface::show()
                 mvwprintz( w, point( 52, i - iStartPos ), iLine == i && iColumn == 2 ?
                            hilite( cLineColor ) : cLineColor, "%s",
                            cur_rules[i].bExclude ? _( "Exclude" ) :  _( "Include" ) );
+                row_hits.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w ) + 1, getbegy( w ) + i - iStartPos ),
+                        point( getbegx( w ) + getmaxx( w ) - 1, getbegy( w ) + i - iStartPos ) ),
+                    i );
             }
         }
 
@@ -214,6 +223,11 @@ void user_interface::show()
     ctxt.register_action( "MOVE_RULE_DOWN" );
     ctxt.register_action( "TEST_RULE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: click a rule row (and a column) to move the cursor there; wheel scrolls.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     const bool allow_swapping = tabs.size() == 2;
     if( allow_swapping ) {
@@ -231,7 +245,34 @@ void user_interface::show()
 
         ui_manager::redraw();
 
-        const std::string action = ctxt.handle_input();
+        const std::string action_in = ctxt.handle_input();
+        std::string action = action_in;
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            // Mouse: pick the rule row and the column under the pointer.
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( const auto &row_hit : row_hits ) {
+                if( !row_hit.first.contains( cell ) ) {
+                    continue;
+                }
+                iLine = row_hit.second;
+                const int rel_x = cell.x - getbegx( w );
+                if( rel_x >= 60 ) {
+                    iColumn = 3;
+                } else if( rel_x >= 50 ) {
+                    iColumn = 2;
+                } else {
+                    iColumn = 1;
+                }
+                break;
+            }
+            continue;
+        }
+        if( action == "SCROLL_UP" ) {
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            action = "DOWN";
+        }
 
         if( action == "NEXT_TAB" ) {
             iTab++;
