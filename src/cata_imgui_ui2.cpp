@@ -2,6 +2,7 @@
 #include "cata_imgui_ui2_lists.h"
 #include "cata_imgui_ui2_menu.h"
 #include "cata_imgui_ui2_focus.h"
+#include "cata_imgui_ui2_aim.h"
 
 #if defined( TILES )
 
@@ -170,6 +171,10 @@ void draw_controls_window()
     ImGui::SameLine();
     ImGui::Checkbox( "示例子窗口", &g_second_open );
     ImGui::Text( "标签：%s（切换 %d 次）", k_tab_names[g_tab_index], g_tab_switch_count );
+    // PR-2A AIM-1 development preview entry (read-only real backpack).
+    if( ImGui::Button( "打开新版 AIM（开发预览）" ) ) {
+        ui2::aim::toggle();
+    }
     ImGui::TextDisabled( "关掉组件后可用这里恢复。" );
     ImGui::End();
 }
@@ -197,6 +202,8 @@ void draw()
     menu::draw();
     // PR-1.5 D batch: focus, keyboard and text input.
     focus::draw();
+    // PR-2A AIM-1: read-only real backpack window.
+    ui2::aim::draw();
 }
 
 } // namespace ui2
