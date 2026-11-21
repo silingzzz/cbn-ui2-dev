@@ -1250,6 +1250,33 @@ void veh_interact::do_repair() {
 
         std::string action = main_context.handle_input();
 
+        // Mouse: click a part row to select it there, click it again to repair it.
+        if (action == "MOUSE_MOVE" || action == "SELECT") {
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            for (const auto& rect : part_rects) {
+                if (!rect.first.contains(cell)) {
+                    continue;
+                }
+                const auto here_it = std::ranges::find(parts_here, rect.second);
+                if (here_it != parts_here.end()) {
+                    const auto j = static_cast<size_t>(
+                                       std::distance(parts_here.begin(), here_it));
+                    const auto repair_it = std::ranges::find(need_repair, j);
+                    if (repair_it != need_repair.end()) {
+                        const auto new_pos =
+                            static_cast<int>(std::distance(need_repair.begin(), repair_it));
+                        if (action == "SELECT" && new_pos == pos) {
+                            action = "CONFIRM";
+                        } else {
+                            pos = new_pos;
+                        }
+                    }
+                }
+                break;
+            }
+            if (action != "CONFIRM") { continue; }
+        }
+
         msg.reset();
         if ((action == "REPAIR" || action == "CONFIRM") && ok) {
             reason = cant_do('r');
@@ -1656,6 +1683,7 @@ void veh_interact::calc_overview() {
 
 void veh_interact::display_overview() {
     werase(w_list);
+    overview_rects.clear();
     std::string last;
     int y = 0;
     if (overview_offset) {
@@ -1690,6 +1718,11 @@ void veh_interact::display_overview() {
 
         // print extra columns (if any)
         overview_opts[idx].details(pt, w_list, y);
+        overview_rects.emplace_back(
+            inclusive_rectangle<point>(point(getbegx(w_list) + 1, getbegy(w_list) + y),
+                                       point(getbegx(w_list) + getmaxx(w_list) - 1,
+                                             getbegy(w_list) + y)),
+            idx);
         y++;
         if (y < (getmaxy(w_list) - 1)) {
             overview_limit = overview_offset;
@@ -1750,6 +1783,28 @@ void veh_interact::overview(const overview_enable_t& enable, const overview_acti
 
         const std::string input = main_context.handle_input();
         msg.reset();
+        if (input == "MOUSE_MOVE" || input == "SELECT") {
+            // Mouse: hover/click a part in the overview list; a click activates it
+            // the same way the confirm key does.
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            bool hit = false;
+            for (const auto& rect : overview_rects) {
+                if (!rect.first.contains(cell)) {
+                    continue;
+                }
+                if (rect.second >= 0 && static_cast<size_t>(rect.second) < overview_opts.size()
+                    && overview_opts[rect.second].hotkey) {
+                    overview_pos = rect.second;
+                    hit = true;
+                    if (input == "SELECT" && overview_action) {
+                        overview_action(*overview_opts[overview_pos].part);
+                        return;
+                    }
+                }
+                break;
+            }
+            if (hit) { continue; }
+        }
         if (input == "CONFIRM" && overview_opts[overview_pos].hotkey && overview_action) {
             overview_action(*overview_opts[overview_pos].part);
             break;
@@ -1961,6 +2016,28 @@ void veh_interact::do_remove() {
 
         // read input
         std::string action = main_context.handle_input();
+
+        // Mouse: click a part row to select it there, click it again to remove it.
+        if (action == "MOUSE_MOVE" || action == "SELECT") {
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            for (const auto& rect : part_rects) {
+                if (!rect.first.contains(cell)) {
+                    continue;
+                }
+                const auto here_it = std::ranges::find(parts_here, rect.second);
+                if (here_it != parts_here.end()) {
+                    const auto new_pos =
+                        static_cast<int>(std::distance(parts_here.begin(), here_it));
+                    if (action == "SELECT" && new_pos == pos) {
+                        action = "CONFIRM";
+                    } else {
+                        pos = new_pos;
+                    }
+                }
+                break;
+            }
+            if (action != "CONFIRM") { continue; }
+        }
 
         msg.reset();
         if (can_remove && (action == "REMOVE" || action == "CONFIRM")) {

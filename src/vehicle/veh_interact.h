@@ -187,6 +187,9 @@ private:
     };
     list_hit_areas list_hits;
 
+    /// Mouse hit areas of the overview part list, recorded by display_overview().
+    std::vector<std::pair<inclusive_rectangle<point>, int>> overview_rects;
+
     /// Maps a terminal cell inside the vehicle grid to the mount offset it shows.
     auto mount_offset_at_cell( const point &cell ) const -> std::optional<point_rel_veh>;
     void display_details(const vpart_info* part);
