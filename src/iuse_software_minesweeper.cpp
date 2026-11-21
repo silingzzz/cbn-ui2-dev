@@ -10,6 +10,7 @@
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "input.h"
 #include "output.h"
 #include "point.h"
@@ -156,6 +157,10 @@ int minesweeper_game::start_game()
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover moves the cursor, left click reveals, right click toggles a flag.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SEC_SELECT" );
 
     static const std::array<nc_color, 9> aColors = {{
             c_white,
@@ -306,6 +311,24 @@ int minesweeper_game::start_game()
         } else {
             ui_manager::redraw();
             action = ctxt.handle_input();
+        }
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" || action == "SEC_SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const point board = cell - point( getbegx( w_minesweeper ), getbegy( w_minesweeper ) ) -
+                                offset;
+            if( half_open_rectangle<point>( point_zero, level ).contains( board ) ) {
+                pl = board;
+                if( action == "SELECT" ) {
+                    action = "CONFIRM";
+                } else if( action == "SEC_SELECT" ) {
+                    action = "FLAG";
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
         }
 
         if( const std::optional<tripoint_rel_ms> vec = ctxt.get_direction( action ) ) {
