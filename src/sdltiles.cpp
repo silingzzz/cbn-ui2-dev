@@ -197,7 +197,11 @@ auto mouse_pixel_to_cell( const point &pixel ) -> point
                       vw, vh, rw, rh, TERMX, TERMY );
         std::fflush( stderr );
     }
-    return point( pixel.x / cell_w, pixel.y / cell_h );
+    // Floor division: truncation would map negative pixels onto cell (0,0).
+    const auto floor_div = []( const int v, const int d ) -> int {
+        return v >= 0 ? v / d : -( ( -v + d - 1 ) / d );
+    };
+    return point( floor_div( pixel.x, cell_w ), floor_div( pixel.y, cell_h ) );
 }
 
 static SDL_Joystick *joystick; // Only one joystick for now.
@@ -3278,6 +3282,9 @@ static void CheckMessages()
 
     std::optional<point> resize_dims;
     bool render_target_reset = false;
+    // Once a click or wheel event has been latched this frame, later motion events
+    // must not overwrite it before getch() gets a chance to return it.
+    bool click_pending = false;
 
     while( SDL_PollEvent( &ev ) ) {
         if( cata_imgui::process_event( ev ) ) {
@@ -3480,6 +3487,10 @@ static void CheckMessages()
                 // TODO: somehow get the "digipad" values from the axes
                 break;
             case SDL_EVENT_MOUSE_MOTION:
+                if( click_pending ) {
+                    // Keep the click/wheel already latched for this frame.
+                    break;
+                }
                 if( get_option<std::string>( "HIDE_CURSOR" ) == "show" ||
                     get_option<std::string>( "HIDE_CURSOR" ) == "hidekb" ) {
                     if( !SDL_CursorVisible() ) {
@@ -3525,6 +3536,7 @@ static void CheckMessages()
                         cata_imgui::trace_game_mouse( 1 );
                         break;
                 }
+                click_pending = true;
             }
             break;
 
@@ -3536,9 +3548,11 @@ static void CheckMessages()
                 if( ev.wheel.y > 0 ) {
                     last_input = input_event( SCROLLWHEEL_UP, input_event_t::mouse );
                     cata_imgui::trace_game_mouse( 2 );
+                    click_pending = true;
                 } else if( ev.wheel.y < 0 ) {
                     last_input = input_event( SCROLLWHEEL_DOWN, input_event_t::mouse );
                     cata_imgui::trace_game_mouse( 2 );
+                    click_pending = true;
                 }
                 break;
 
