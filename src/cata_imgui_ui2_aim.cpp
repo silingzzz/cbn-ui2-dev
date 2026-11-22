@@ -12,6 +12,7 @@
 #include "avatar.h"
 #include "inventory.h"
 #include "item.h"
+#include "output.h"
 #include "units.h"
 
 namespace
@@ -68,16 +69,25 @@ void draw_detail( const aim_row &row )
     ImGui::Separator();
     if( ImGui::BeginChild( "aim_detail", ImVec2( 0.0f, 0.0f ), false ) ) {
         for( const iteminfo &ii : items.front()->info() ) {
-            if( ii.sValue.empty() ) {
-                if( !ii.sName.empty() ) {
-                    ImGui::TextUnformatted( ii.sName.c_str() );
+            // Mirrors format_item_info(): <num> is replaced by sValue only when
+            // the entry has a real numeric value; -999 means "no value".
+            std::string line = ii.bDrawName ? ii.sName : "";
+            if( ii.sType != "DESCRIPTION" ) {
+                const std::string fmt = ii.sFmt;
+                const std::size_t num_pos = fmt.find( "<num>" );
+                if( num_pos != std::string::npos ) {
+                    line += fmt.substr( 0, num_pos );
+                    if( ii.sValue != "-999" ) {
+                        line += ii.sValue;
+                    }
+                    line += fmt.substr( num_pos + 5 );
+                } else {
+                    line += fmt;
                 }
-                continue;
             }
-            if( ii.bDrawName && !ii.sName.empty() ) {
-                ImGui::Text( "%s %s", ii.sName.c_str(), ii.sValue.c_str() );
-            } else {
-                ImGui::TextUnformatted( ii.sValue.c_str() );
+            line = remove_color_tags( line );
+            if( !line.empty() ) {
+                ImGui::TextWrapped( "%s", line.c_str() );
             }
         }
     }
