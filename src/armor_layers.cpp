@@ -551,6 +551,9 @@ void show_armor_layers_ui( Character &who )
     ctxt.register_action( "REMOVE_ARMOR" );
     ctxt.register_action( "USAGE_HELP" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    // Mouse: hover selects a worn item; clicking a row confirms it.
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     auto do_return_entry = []() {
         avatar &you = get_avatar();
@@ -790,14 +793,18 @@ void show_armor_layers_ui( Character &who )
         std::string action = ctxt.handle_input();
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            auto hit_armor_row = false;
             for( const auto &rect : armor_rects ) {
                 if( rect.first.contains( cell ) ) {
                     leftListIndex = rect.second;
+                    hit_armor_row = true;
                     break;
                 }
             }
-            if( action == "SELECT" ) {
+            if( action == "SELECT" && hit_armor_row ) {
                 action = "CONFIRM";
+            } else {
+                continue;
             }
         }
         if( who.is_npc() && action == "ASSIGN_INVLETS" ) {

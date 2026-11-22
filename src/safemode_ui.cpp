@@ -1,6 +1,7 @@
 #include "safemode_ui.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -124,6 +125,7 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
     ctxt.register_action( "SCROLL_UP" );
     ctxt.register_action( "SCROLL_DOWN" );
     std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
+    std::vector<std::pair<inclusive_rectangle<point>, int>> tab_hits;
 
     if( is_safemode_in ) {
         ctxt.register_action( "SWITCH_SAFEMODE_OPTION" );
@@ -180,11 +182,19 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
         mvwprintz( w_header, point( column_pos[COLUMN_CATEGORY] + 2, 3 ), c_white, pgettext( "category",
                    "Cat" ) );
 
+        tab_hits.clear();
         int locx = 17;
-        locx += shortcut_print( w_header, point( locx, 2 ), c_white,
-                                ( tab == GLOBAL_TAB ) ? hilite( c_white ) : c_white, _( "[<Global>]" ) ) + 1;
-        shortcut_print( w_header, point( locx, 2 ), c_white,
-                        ( tab == CHARACTER_TAB ) ? hilite( c_white ) : c_white, _( "[<Character>]" ) );
+        const std::array<std::string, 2> tab_labels = { _( "[<Global>]" ), _( "[<Character>]" ) };
+        for( int i = 0; i < static_cast<int>( tab_labels.size() ); ++i ) {
+            const int tab_width = shortcut_print( w_header, point( locx, 2 ), c_white,
+                                    tab == i ? hilite( c_white ) : c_white, tab_labels[i] );
+            tab_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( w_header ) + locx, getbegy( w_header ) + 2 ),
+                    point( getbegx( w_header ) + locx + tab_width - 1,
+                           getbegy( w_header ) + 2 ) ), i );
+            locx += tab_width + 1;
+        }
 
         locx = 55;
         mvwprintz( w_header, point( locx, 0 ), c_white, _( "Safe Mode enabled:" ) );
@@ -272,8 +282,16 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
         std::string action = action_in;
 
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
-            // Mouse: pick the rule row and the column under the pointer.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const auto tab_hit = std::ranges::find_if( tab_hits, [&cell]( const auto &hit ) {
+                return hit.first.contains( cell );
+            } );
+            if( tab_hit != tab_hits.end() ) {
+                tab = tab_hit->second;
+                line = 0;
+                continue;
+            }
+            // Mouse: pick the rule row and the column under the pointer.
             for( const auto &row_hit : row_hits ) {
                 if( !row_hit.first.contains( cell ) ) {
                     continue;

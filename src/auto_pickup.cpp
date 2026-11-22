@@ -90,7 +90,8 @@ void user_interface::show()
     int iLine = 0;
     int iColumn = 1;
     int iStartPos = 0;
-    // Mouse hit areas of the rule rows, recorded while drawing.
+    // Mouse hit areas for tabs and rule rows, recorded while drawing.
+    std::vector<std::pair<inclusive_rectangle<point>, size_t>> tab_hits;
     std::vector<std::pair<inclusive_rectangle<point>, int>> row_hits;
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
@@ -138,10 +139,18 @@ void user_interface::show()
         mvwprintz( w_header, point( 52, 3 ), c_white, _( "I/E" ) );
 
         rule_list &cur_rules = tabs[iTab].new_rules;
+        tab_hits.clear();
         int locx = 17;
         for( size_t i = 0; i < tabs.size(); i++ ) {
             const auto color = iTab == i ? hilite( c_white ) : c_white;
-            locx += shortcut_print( w_header, point( locx, 2 ), c_white, color, tabs[i].title ) + 1;
+            const int tab_width = shortcut_print( w_header, point( locx, 2 ), c_white, color,
+                                    tabs[i].title );
+            tab_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point( getbegx( w_header ) + locx, getbegy( w_header ) + 2 ),
+                    point( getbegx( w_header ) + locx + tab_width - 1,
+                           getbegy( w_header ) + 2 ) ), i );
+            locx += tab_width + 1;
         }
 
         locx = 55;
@@ -223,7 +232,7 @@ void user_interface::show()
     ctxt.register_action( "MOVE_RULE_DOWN" );
     ctxt.register_action( "TEST_RULE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
-    // Mouse: click a rule row (and a column) to move the cursor there; wheel scrolls.
+    // Mouse: hover/click tabs and rule rows (and columns) to move the cursor; wheel scrolls.
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
     ctxt.register_action( "SCROLL_UP" );
@@ -249,8 +258,16 @@ void user_interface::show()
         std::string action = action_in;
 
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
-            // Mouse: pick the rule row and the column under the pointer.
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            const auto tab_hit = std::ranges::find_if( tab_hits, [&cell]( const auto &hit ) {
+                return hit.first.contains( cell );
+            } );
+            if( tab_hit != tab_hits.end() ) {
+                iTab = tab_hit->second;
+                iLine = 0;
+                continue;
+            }
+            // Pick the rule row and the column under the pointer.
             for( const auto &row_hit : row_hits ) {
                 if( !row_hit.first.contains( cell ) ) {
                     continue;
