@@ -541,6 +541,20 @@
   },
   {
     "type": "keybinding",
+    "id": "SCROLL_UP",
+    "category": "SORT_ARMOR",
+    "name": "Scroll worn armor up",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_UP" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_DOWN",
+    "category": "SORT_ARMOR",
+    "name": "Scroll worn armor down",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "USAGE_HELP",
     "category": "SORT_ARMOR",
     "name": "Display Usage Help",
@@ -713,14 +727,14 @@
     "id": "SCROLL_UP",
     "category": "CRAFTING",
     "name": "Scroll item info up",
-    "bindings": [ { "input_method": "keyboard", "key": "PPAGE" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "PPAGE" }, { "input_method": "mouse", "key": "SCROLL_UP" } ]
   },
   {
     "type": "keybinding",
     "id": "SCROLL_DOWN",
     "category": "CRAFTING",
     "name": "Scroll item info down",
-    "bindings": [ { "input_method": "keyboard", "key": "NPAGE" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "NPAGE" }, { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
   },
   {
     "type": "keybinding",
@@ -1383,6 +1397,20 @@
     "category": "NEW_CHAR_SKILLS",
     "name": "Scroll description down",
     "bindings": [ { "input_method": "keyboard", "key": "NPAGE" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_UP",
+    "category": "VEH_INTERACT",
+    "name": "Scroll parts list up",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_UP" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_DOWN",
+    "category": "VEH_INTERACT",
+    "name": "Scroll parts list down",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
   },
   {
     "type": "keybinding",
@@ -3453,6 +3481,20 @@
     "category": "EXTENDED_DESCRIPTION",
     "name": "Describe terrain",
     "bindings": [ { "input_method": "keyboard", "key": "t" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_UP",
+    "category": "NPC_TRADE",
+    "name": "Scroll list up",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_UP" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_DOWN",
+    "category": "NPC_TRADE",
+    "name": "Scroll list down",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
   },
   {
     "type": "keybinding",

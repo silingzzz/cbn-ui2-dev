@@ -282,9 +282,18 @@ void user_interface::show()
             continue;
         }
         if( action == "SCROLL_UP" ) {
-            action = "UP";
+            // The wheel clamps at the ends; keyboard UP/DOWN keeps its wrap-around.
+            if( iLine > 0 ) {
+                iLine--;
+                iColumn = 1;
+            }
+            continue;
         } else if( action == "SCROLL_DOWN" ) {
-            action = "DOWN";
+            if( iLine + 1 < static_cast<int>( cur_rules.size() ) ) {
+                iLine++;
+                iColumn = 1;
+            }
+            continue;
         }
 
         if( action == "NEXT_TAB" ) {

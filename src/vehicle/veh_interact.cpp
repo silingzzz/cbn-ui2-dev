@@ -229,6 +229,8 @@ veh_interact::veh_interact(vehicle& veh, tripoint_mnt_veh p)
     main_context.register_directions();
     main_context.register_action("MOUSE_MOVE");
     main_context.register_action("SELECT");
+    main_context.register_action("SCROLL_UP");
+    main_context.register_action("SCROLL_DOWN");
     main_context.register_action("QUIT");
     main_context.register_action("INSTALL");
     main_context.register_action("REPAIR");
@@ -425,6 +427,30 @@ void veh_interact::do_main_loop() {
         calc_overview();
         ui_manager::redraw();
         std::string action = main_context.handle_input();
+        if (action == "SCROLL_UP" || action == "SCROLL_DOWN") {
+            const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
+            const bool over_parts = getmaxx(w_parts) > 0 &&
+                                    cell.x >= getbegx(w_parts) &&
+                                    cell.x < getbegx(w_parts) + getmaxx(w_parts) &&
+                                    cell.y >= getbegy(w_parts) &&
+                                    cell.y < getbegy(w_parts) + getmaxy(w_parts);
+            const bool over_details = getmaxx(w_details) > 0 &&
+                                      cell.x >= getbegx(w_details) &&
+                                      cell.x < getbegx(w_details) + getmaxx(w_details) &&
+                                      cell.y >= getbegy(w_details) &&
+                                      cell.y < getbegy(w_details) + getmaxy(w_details);
+            const int step = action == "SCROLL_UP" ? -1 : 1;
+            if (over_parts) {
+                if (step < 0) {
+                    if (parts_list_offset > 0) { parts_list_offset--; }
+                } else if (cpart >= 0 && parts_list_offset < static_cast<int>(parts_here.size()) - 1) {
+                    parts_list_offset++;
+                }
+            } else if (over_details) {
+                move_overview_line(step);
+            }
+            continue;
+        }
         if (action == "MOUSE_MOVE" || action == "SELECT") {
             const point cell = mouse_pixel_to_cell(main_context.get_raw_input().mouse_pos);
             bool on_part = false;
@@ -443,7 +469,6 @@ void veh_interact::do_main_loop() {
                     move_cursor(tripoint_rel_veh(*off, vehicle_cursor.z()));
                 }
             }
-            if (action == "SELECT") { action = "CONFIRM"; }
         }
         msg.reset();
         if (const std::optional<tripoint_rel_ms> vec = main_context.get_direction(action)) {

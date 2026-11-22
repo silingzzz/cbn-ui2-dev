@@ -307,9 +307,18 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
             continue;
         }
         if( action == "SCROLL_UP" ) {
-            action = "UP";
+            // The wheel clamps at the ends; keyboard UP/DOWN keeps its wrap-around.
+            if( line > 0 ) {
+                line--;
+                column = 0;
+            }
+            continue;
         } else if( action == "SCROLL_DOWN" ) {
-            action = "DOWN";
+            if( line + 1 < static_cast<int>( current_tab.size() ) ) {
+                line++;
+                column = 0;
+            }
+            continue;
         }
 
         if( action == "NEXT_TAB" ) {

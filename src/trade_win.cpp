@@ -198,6 +198,8 @@ auto trading_window::update_win( npc &np, const std::string &deal ) -> void
     ctxt.register_action( "PAGE_DOWN" );
     ctxt.register_action( "UP" );
     ctxt.register_action( "DOWN" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "LEFT" );
     ctxt.register_action( "RIGHT" );
     ctxt.register_action( "FILTER" );
@@ -1206,6 +1208,37 @@ auto trading_window::perform_trade( npc &np, const std::string &deal ) -> bool
                         .cursor = new_cursor,
                         .offset = new_offset
                     } );
+                }
+            }
+        } else if( action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool over_list = false;
+            for( const trade_row_hit &hit : trade_row_hits ) {
+                if( hit.rect.contains( cell ) ) {
+                    focus_them = hit.theirs;
+                    over_list = true;
+                    break;
+                }
+            }
+            if( over_list ) {
+                const auto &wheel_filtered = focus_them ? them_filtered : you_filtered;
+                auto &wheel_cursor = focus_them ? them_cursor : you_cursor;
+                auto &wheel_category_cursor = focus_them ? them_category_cursor : you_category_cursor;
+                if( category_mode ) {
+                    const auto &wheel_list = focus_them ? state.theirs : state.yours;
+                    const auto wheel_ranges = build_category_ranges( wheel_list, wheel_filtered );
+                    if( !wheel_ranges.empty() ) {
+                        const int step = action == "SCROLL_UP" ? -1 : 1;
+                        const int next = static_cast<int>( wheel_category_cursor ) + step;
+                        wheel_category_cursor = static_cast<size_t>(
+                                            std::min( std::max( next, 0 ), static_cast<int>( wheel_ranges.size() ) - 1 ) );
+                        wheel_cursor = wheel_ranges[wheel_category_cursor].start;
+                    }
+                } else if( !wheel_filtered.empty() ) {
+                    const int step = action == "SCROLL_UP" ? -1 : 1;
+                    const int next = static_cast<int>( wheel_cursor ) + step;
+                    wheel_cursor = static_cast<size_t>(
+                                       std::min( std::max( next, 0 ), static_cast<int>( wheel_filtered.size() ) - 1 ) );
                 }
             }
         } else if( action == "UP" ) {

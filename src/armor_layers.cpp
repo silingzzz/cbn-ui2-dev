@@ -554,6 +554,8 @@ void show_armor_layers_ui( Character &who )
     // Mouse: hover selects a worn item; clicking a row confirms it.
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     auto do_return_entry = []() {
         avatar &you = get_avatar();
@@ -806,6 +808,26 @@ void show_armor_layers_ui( Character &who )
             } else {
                 continue;
             }
+        }
+        if( action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            bool over_armor_list = false;
+            for( const auto &rect : armor_rects ) {
+                if( rect.first.contains( cell ) ) {
+                    over_armor_list = true;
+                    break;
+                }
+            }
+            if( over_armor_list && leftListSize > 0 ) {
+                const int step = action == "SCROLL_UP" ? -1 : 1;
+                leftListIndex = std::min( std::max( leftListIndex + step, 0 ), leftListSize - 1 );
+                if( leftListIndex < leftListOffset ) {
+                    leftListOffset = leftListIndex;
+                } else if( leftListIndex >= leftListOffset + leftListLines ) {
+                    leftListOffset = leftListIndex + 1 - leftListLines;
+                }
+            }
+            continue;
         }
         if( who.is_npc() && action == "ASSIGN_INVLETS" ) {
             // It doesn't make sense to assign invlets to NPC items
