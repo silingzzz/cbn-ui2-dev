@@ -67,9 +67,9 @@ void draw()
     std::vector<int> visible;
     visible.reserve( all.size() );
     for( int i = 0; i < static_cast<int>( all.size() ); ++i ) {
-        const std::string category = clean( all[i].first );
+        const std::string timestamp = clean( all[i].first );
         const std::string text = clean( all[i].second );
-        if( contains_ci( category + " " + text, g_search ) ) {
+        if( contains_ci( timestamp + " " + text, g_search ) ) {
             visible.push_back( i );
         }
     }
@@ -85,7 +85,7 @@ void draw()
     }
 
     ImGui::SetNextItemWidth( 260.0f );
-    ImGui::InputTextWithHint( "##msg_search", "搜索类别或内容…", g_search, IM_ARRAYSIZE( g_search ) );
+    ImGui::InputTextWithHint( "##msg_search", "搜索时间或内容…", g_search, IM_ARRAYSIZE( g_search ) );
     ImGui::SameLine();
     ImGui::TextDisabled( "显示 %d / %d 条", static_cast<int>( visible.size() ),
                          static_cast<int>( all.size() ) );
@@ -100,7 +100,7 @@ void draw()
         // Newest first, while retaining the original index for selection.
         for( auto it = visible.rbegin(); it != visible.rend(); ++it ) {
             const int idx = *it;
-            const std::string category = clean( all[idx].first );
+            const std::string timestamp = clean( all[idx].first );
             const std::string text = clean( all[idx].second );
             char label[512];
             std::snprintf( label, sizeof( label ), "%s##msg%d", text.c_str(), idx );
@@ -108,22 +108,27 @@ void draw()
                 g_selected = idx;
             }
             if( ImGui::IsItemHovered() ) {
-                ImGui::SetTooltip( "%s", category.c_str() );
+                ImGui::SetTooltip( "%s", timestamp.c_str() );
             }
         }
     }
     ImGui::EndChild();
 
     ImGui::Separator();
-    if( g_selected < 0 ) {
-        ImGui::TextDisabled( "选择一条消息查看详情。" );
-    } else {
-        ImGui::TextDisabled( "类别：%s", clean( all[g_selected].first ).c_str() );
-        ImGui::Separator();
-        ImGui::PushTextWrapPos();
-        ImGui::TextUnformatted( clean( all[g_selected].second ).c_str() );
-        ImGui::PopTextWrapPos();
+    const float detail_height = ImGui::GetContentRegionAvail().y;
+    if( ImGui::BeginChild( "msg_detail", ImVec2( 0.0f, detail_height ), true,
+                           ImGuiWindowFlags_AlwaysVerticalScrollbar ) ) {
+        if( g_selected < 0 ) {
+            ImGui::TextDisabled( "选择一条消息查看详情。" );
+        } else {
+            ImGui::TextDisabled( "时间：%s", clean( all[g_selected].first ).c_str() );
+            ImGui::Separator();
+            ImGui::PushTextWrapPos();
+            ImGui::TextUnformatted( clean( all[g_selected].second ).c_str() );
+            ImGui::PopTextWrapPos();
+        }
     }
+    ImGui::EndChild();
 
     ImGui::End();
 }
