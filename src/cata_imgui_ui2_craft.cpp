@@ -32,6 +32,14 @@ char g_search[128] = "";
 // Total steps of the craft started from this window; used for the progress bar.
 int g_activity_total_moves = 0;
 bool g_pending_cancel = false;
+bool g_pending_start = false;
+
+struct queue_entry {
+    const recipe *rec = nullptr;
+    int batch = 1;
+};
+std::vector<queue_entry> g_queue;
+bool g_queue_blocked = false;
 
 auto plain_text( const std::string &raw ) -> std::string
 {
@@ -146,6 +154,17 @@ void draw()
                          static_cast<int>( rows.size() ), g_batch );
     ImGui::SameLine();
     ImGui::Checkbox( "仅材料齐全", &g_only_craftable );
+    ImGui::SameLine();
+    if( g_selected == nullptr ) {
+        ImGui::BeginDisabled();
+    }
+    if( ImGui::Button( "加入队列（当前配方 ×N）" ) ) {
+        g_queue.push_back( queue_entry{ g_selected, g_batch } );
+        g_queue_blocked = false;
+    }
+    if( g_selected == nullptr ) {
+        ImGui::EndDisabled();
+    }
     ImGui::Separator();
 
     const float inner_height = ImGui::GetContentRegionAvail().y;
@@ -257,7 +276,46 @@ void draw()
             if( is_crafting ) {
                 ImGui::TextDisabled( "制作进行中；进度与剩余步数见上，可点上方按钮取消。" );
             } else {
-                ImGui::TextDisabled( "批量制作仍走原 make_craft；队列、优先级与状态由游戏活动系统管理。" );
+                ImGui::TextDisabled( "空闲时加入队列会自动开始下一项。" );
+            }
+            ImGui::Separator();
+            ImGui::Text( "制作队列：%d 项", static_cast<int>( g_queue.size() ) );
+            if( g_queue_blocked ) {
+                ImGui::SameLine();
+                ImGui::TextColored( ImVec4( 0.95f, 0.60f, 0.55f, 1.0f ), "（已暂停）" );
+            }
+            if( g_queue.empty() ) {
+                ImGui::TextDisabled( "（空）" );
+            }
+            for( std::size_t i = 0; i < g_queue.size(); ++i ) {
+                const queue_entry &entry = g_queue[i];
+                ImGui::PushID( static_cast<int>( i ) );
+                ImGui::Text( "%zu. %s ×%d", i + 1,
+                             plain_text( entry.rec->result_name() ).c_str(), entry.batch );
+                ImGui::SameLine( 300.0f );
+                if( i > 0 && ImGui::SmallButton( "置顶" ) ) {
+                    const queue_entry moved = g_queue[i];
+                    g_queue.erase( g_queue.begin() + static_cast<std::ptrdiff_t>( i ) );
+                    g_queue.insert( g_queue.begin(), moved );
+                    g_queue_blocked = false;
+                    ImGui::PopID();
+                    break;
+                }
+                if( i > 0 ) {
+                    ImGui::SameLine();
+                    if( ImGui::SmallButton( "上移" ) ) {
+                        std::swap( g_queue[i], g_queue[i - 1] );
+                        g_queue_blocked = false;
+                    }
+                    ImGui::SameLine();
+                }
+                if( ImGui::SmallButton( "移除" ) ) {
+                    g_queue.erase( g_queue.begin() + static_cast<std::ptrdiff_t>( i ) );
+                    g_queue_blocked = false;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
             }
         }
     }
@@ -271,7 +329,30 @@ void draw()
             you.cancel_activity();
             you.invalidate_crafting_inventory();
             g_activity_total_moves = 0;
-            add_msg( m_info, "新版制作：已取消当前制作。" );
+            if( !g_queue.empty() ) {
+                g_queue_blocked = true;
+                add_msg( m_info, "新版制作：已取消当前制作，队列暂停。" );
+            } else {
+                add_msg( m_info, "新版制作：已取消当前制作。" );
+            }
+        }
+    }
+
+    if( !g_queue_blocked && !you.activity && !g_queue.empty() ) {
+        const queue_entry entry = g_queue.front();
+        const inventory &inv = you.crafting_inventory();
+        if( entry.rec->deduped_requirements().can_make_with_inventory(
+                inv, entry.rec->get_component_filter(), entry.batch ) ) {
+            start_craft( *entry.rec, entry.batch );
+            if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+                g_queue.erase( g_queue.begin() );
+            } else {
+                g_queue_blocked = true;
+                add_msg( m_info, "新版制作：队列首项未能启动，队列已暂停。" );
+            }
+        } else {
+            g_queue_blocked = true;
+            add_msg( m_info, "新版制作：队列首项材料不足，队列已暂停。" );
         }
     }
 }
