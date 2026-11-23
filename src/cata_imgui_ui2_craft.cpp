@@ -16,13 +16,16 @@
 #include "inventory.h"
 #include "item.h"
 #include "messages.h"
+#include "player_activity.h"
 #include "recipe.h"
 #include "recipe_dictionary.h"
+#include "requirements.h"
 
 namespace
 {
 
 bool g_open = false;
+bool g_only_craftable = false;
 const recipe *g_selected = nullptr;
 int g_batch = 1;
 char g_search[128] = "";
@@ -74,6 +77,13 @@ auto build_rows() -> std::vector<const recipe *>
                    std::string::npos;
         } );
     }
+    if( g_only_craftable ) {
+        const inventory &inv = you.crafting_inventory();
+        std::erase_if( rows, [&inv]( const recipe * rec ) {
+            return !rec->deduped_requirements().can_make_with_inventory(
+                       inv, rec->get_component_filter(), g_batch );
+        } );
+    }
     std::sort( rows.begin(), rows.end(), []( const recipe * a, const recipe * b ) {
         return lower_copy( plain_text( a->result_name() ) ) <
                lower_copy( plain_text( b->result_name() ) );
@@ -113,12 +123,13 @@ void draw()
     }
 
     const std::vector<const recipe *> rows = build_rows();
+    Character &you = get_avatar();
     if( std::find( rows.begin(), rows.end(), g_selected ) == rows.end() ) {
         g_selected = rows.empty() ? nullptr : rows.front();
     }
 
-    ImGui::SetNextWindowPos( ImVec2( 60.0f, 650.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 380.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowPos( ImVec2( 60.0f, 520.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 470.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "制作（PR-4 预览）", &g_open ) ) {
         ImGui::End();
         return;
@@ -129,6 +140,8 @@ void draw()
     ImGui::SameLine();
     ImGui::TextDisabled( "可用配方 %d ｜ 批量 %d ｜ 组件/工具由游戏检查",
                          static_cast<int>( rows.size() ), g_batch );
+    ImGui::SameLine();
+    ImGui::Checkbox( "仅材料齐全", &g_only_craftable );
     ImGui::Separator();
 
     const float inner_height = ImGui::GetContentRegionAvail().y;
@@ -166,17 +179,51 @@ void draw()
                                  plain_text( rec.primary_skill_string( &get_avatar(), true ) ).c_str() );
             ImGui::TextDisabled( "相关技能：%s",
                                  plain_text( rec.required_all_skills_string() ).c_str() );
+
+            const inventory &inv = you.crafting_inventory();
+            const int batch = std::max( 1, std::min( g_batch, 50 ) );
+            const bool can_make = rec.deduped_requirements().can_make_with_inventory(
+                                      inv, rec.get_component_filter(), batch );
+            ImGui::TextColored( can_make ? ImVec4( 0.55f, 0.90f, 0.55f, 1.0f )
+                                 : ImVec4( 0.95f, 0.60f, 0.55f, 1.0f ),
+                                 can_make ? "当前批次 %d：材料与工具齐全" : "当前批次 %d：材料或工具不足",
+                                 batch );
+            if( !can_make ) {
+                const std::string missing =
+                    plain_text( rec.simple_requirements().list_missing() );
+                if( !missing.empty() ) {
+                    ImGui::TextWrapped( "%s", missing.c_str() );
+                }
+            }
+            if( ImGui::TreeNode( "全部需求（组件 / 工具 / 质量）" ) ) {
+                const std::string all = plain_text( rec.simple_requirements().list_all() );
+                ImGui::TextWrapped( "%s", all.empty() ? "（无组件或工具要求）" : all.c_str() );
+                ImGui::TreePop();
+            }
+            if( you.activity ) {
+                ImGui::TextDisabled( "当前活动：%s", you.activity->id().str().c_str() );
+            } else {
+                ImGui::TextDisabled( "当前没有进行中的活动" );
+            }
             ImGui::Separator();
             ImGui::SetNextItemWidth( 100.0f );
             ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
             g_batch = std::max( 1, std::min( g_batch, 50 ) );
             ImGui::SameLine();
+            if( !can_make ) {
+                ImGui::BeginDisabled();
+            }
             if( ImGui::Button( "制作 1 次" ) ) {
                 start_craft( rec, 1 );
             }
             ImGui::SameLine();
             if( ImGui::Button( "制作 N 次" ) ) {
                 start_craft( rec, g_batch );
+            }
+            if( !can_make ) {
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::TextDisabled( "（材料或工具不足，已禁用）" );
             }
             ImGui::TextDisabled( "批量制作仍走原 make_craft；队列、优先级与状态由游戏活动系统管理。" );
         }
