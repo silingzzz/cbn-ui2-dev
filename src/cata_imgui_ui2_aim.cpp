@@ -693,7 +693,7 @@ void draw()
 
         map &here = get_map();
         map_stack stack = here.i_at( ground );
-        if( ImGui::BeginChild( "aim_ground_list", ImVec2( 0.0f, 330.0f ), true ) ) {
+        if( ImGui::BeginChild( "aim_ground_list", ImVec2( 0.0f, 220.0f ), true ) ) {
             if( stack.empty() ) {
                 ImGui::TextDisabled( "这一格没有物品。" );
             }
@@ -762,7 +762,18 @@ void draw()
         }
         ImGui::EndDisabled();
 
-        ImGui::Button( "把背包物品拖到这里丢下", ImVec2( -1.0f, 30.0f ) );
+        if( ImGui::Button( "把背包物品拖到这里丢下（或点击丢下选中）",
+                           ImVec2( -1.0f, 30.0f ) ) ) {
+            const bool has_row = g_selected >= 0 &&
+                                 g_selected < static_cast<int>( snap.rows.size() );
+            if( has_row ) {
+                const aim_row &dropped = snap.rows[static_cast<std::size_t>( g_selected )];
+                const int amount = std::max( 1, std::min( g_move_amount, dropped.count ) );
+                submit_move( dropped, amount, targets[g_ground_target] );
+            } else {
+                g_status = "先在左侧选中一件背包物品";
+            }
+        }
         if( ImGui::BeginDragDropTarget() ) {
             if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "AIM_ROW" ) ) {
                 const std::string key( static_cast<const char *>( payload->Data ),
