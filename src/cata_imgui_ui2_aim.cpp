@@ -435,7 +435,25 @@ void draw()
 
     const float list_width = 520.0f;
     if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
-        ImGui::Button( "把地面物品拖到这里放入背包", ImVec2( -1.0f, 30.0f ) );
+        if( ImGui::Button( "把地面物品拖到这里放入背包（或点击拾取选中）",
+                           ImVec2( -1.0f, 30.0f ) ) ) {
+            map &here = get_map();
+            map_stack stack = here.i_at( current_ground_tile() );
+            int idx = 0;
+            bool picked = false;
+            for( item *it : stack ) {
+                if( idx == g_selected_ground && it != nullptr ) {
+                    aim_ground_request request{ idx, it->typeId(), ground_pickup_amount( *it ) };
+                    submit_pickup( request );
+                    picked = true;
+                    break;
+                }
+                ++idx;
+            }
+            if( !picked ) {
+                g_status = "先在右侧地面列表选中物品";
+            }
+        }
         if( ImGui::BeginDragDropTarget() ) {
             if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "GROUND_ITEM" ) ) {
                 aim_ground_request request;
