@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,7 @@
 #include "cata_imgui_ui2_zone.h"
 #include "inventory.h"
 #include "item.h"
+#include "map/map.h"
 #include "messages.h"
 #include "output.h"
 #include "units.h"
@@ -38,6 +41,10 @@ std::string g_selected_key;   // "category|type|stack" identity for re-validatio
 int g_dest_index = 0;
 int g_move_amount = 1;
 bool g_move_pending = false;
+bool g_ground_open = false;
+int g_ground_target = 0;   // index into aim_move_targets()
+int g_selected_ground = -1;
+bool g_pickup_pending = false;
 std::string g_status = "每帧重建快照 · 可移动物品";
 std::vector<std::string> g_checked_keys;
 std::string g_last_filter;
@@ -190,6 +197,55 @@ auto submit_batch( const std::vector<aim_move_request> &requests, int total,
     return result;
 }
 
+auto current_ground_tile() -> tripoint_bub_ms
+{
+    const auto &targets = aim_move_targets();
+    return get_avatar().bub_pos() + targets[g_ground_target].offset;
+}
+
+auto ground_pickup_amount( const item &it ) -> int
+{
+    const int available = it.count_by_charges() ? it.charges : 1;
+    if( ImGui::GetIO().KeyCtrl ) {
+        return 1;
+    }
+    if( ImGui::GetIO().KeyShift ) {
+        return std::max( 1, available / 2 );
+    }
+    return available;
+}
+
+auto parse_ground_payload( const char *data, std::size_t size, aim_ground_request &request ) -> bool
+{
+    if( data == nullptr || size < 3 ) {
+        return false;
+    }
+    const std::string text( data, size );
+    const std::size_t first = text.find( '|' );
+    const std::size_t second = first == std::string::npos ? std::string::npos :
+                               text.find( '|', first + 1 );
+    if( first == std::string::npos || second == std::string::npos ) {
+        return false;
+    }
+    request.stack_index = std::atoi( text.substr( 0, first ).c_str() );
+    request.type = itype_id( text.substr( first + 1, second - first - 1 ) );
+    request.amount = std::atoi( text.substr( second + 1 ).c_str() );
+    return request.stack_index >= 0 && !request.type.is_empty() && request.amount > 0;
+}
+
+void submit_pickup( const aim_ground_request &request )
+{
+    const aim_pickup_result result = aim_pickup_items( get_avatar(), current_ground_tile(),
+                                   std::vector<aim_ground_request>{ request } );
+    if( result == aim_pickup_result::started ) {
+        g_pickup_pending = true;
+        g_status = "已提交拾取；按 F10 关闭覆盖层，游戏才会推进并执行。";
+        add_msg( m_info, "已提交拾取：%s（%d 件）", request.type.str().c_str(), request.amount );
+    } else {
+        g_status = "地面物品已变化，拾取未提交";
+    }
+}
+
 } // namespace
 
 namespace ui2
@@ -219,6 +275,9 @@ void draw()
     // button becomes available again on the next open.
     if( g_move_pending && !get_avatar().activity ) {
         g_move_pending = false;
+    }
+    if( g_pickup_pending && !get_avatar().activity ) {
+        g_pickup_pending = false;
     }
 
     // Re-validate the selection against the freshly built snapshot: item has no
@@ -296,6 +355,10 @@ void draw()
     if( ImGui::Button( "区域", ImVec2( 60.0f, 0.0f ) ) ) {
         ui2::zone::toggle();
     }
+    ImGui::SameLine();
+    if( ImGui::Button( g_ground_open ? "收起地面" : "地面物品", ImVec2( 80.0f, 0.0f ) ) ) {
+        g_ground_open = !g_ground_open;
+    }
 
     ImGui::SameLine();
     ImGui::TextDisabled( "共 %d 项 ｜ 总重 %.2f kg ｜ 总体积 %.2f L ｜ 刷新 #%llu",
@@ -372,6 +435,20 @@ void draw()
 
     const float list_width = 520.0f;
     if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
+        ImGui::Button( "把地面物品拖到这里放入背包", ImVec2( -1.0f, 30.0f ) );
+        if( ImGui::BeginDragDropTarget() ) {
+            if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "GROUND_ITEM" ) ) {
+                aim_ground_request request;
+                if( parse_ground_payload( static_cast<const char *>( payload->Data ),
+                                          static_cast<std::size_t>( payload->DataSize ), request ) ) {
+                    submit_pickup( request );
+                } else {
+                    g_status = "拖放来源已失效，请重新选择地面物品";
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::Separator();
         if( visible.empty() ) {
             ImGui::Dummy( ImVec2( 0.0f, 40.0f ) );
             ImGui::TextDisabled( snap.rows.empty() ? "（背包是空的）" : "（没有匹配的物品）" );
@@ -574,6 +651,143 @@ void draw()
     ImGui::TextDisabled( "｜数据源：Character::inv（其余操作仍走旧 AIM）" );
 
     ImGui::End();
+
+    if( !g_ground_open ) {
+        return;
+    }
+
+    ImGui::SetNextWindowPos( ImVec2( 965.0f, 60.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowSize( ImVec2( 430.0f, 560.0f ), ImGuiCond_FirstUseEver );
+    bool ground_open = true;
+    if( ImGui::Begin( "地面物品##aim_ground", &ground_open,
+                      ImGuiWindowFlags_NoSavedSettings ) ) {
+        const auto &targets = aim_move_targets();
+        const tripoint_bub_ms ground = current_ground_tile();
+        const tripoint_abs_ms ground_abs = bub_to_abs( ground );
+        ImGui::Text( "脚下与相邻地面格（%d,%d,%d）", ground_abs.x(), ground_abs.y(), ground_abs.z() );
+        ImGui::TextDisabled( "先选地面格，再拖动或双击物品。" );
+        ImGui::TextDisabled( "默认整堆；Ctrl 拖 1 件；Shift 拖一半。" );
+
+        static const int ground_grid[3][3] = { { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 } };
+        for( int gy = 0; gy < 3; ++gy ) {
+            for( int gx = 0; gx < 3; ++gx ) {
+                const int ti = ground_grid[gy][gx];
+                if( gx > 0 ) {
+                    ImGui::SameLine();
+                }
+                if( g_ground_target == ti ) {
+                    ImGui::PushStyleColor( ImGuiCol_Button, ImVec4( 0.24f, 0.52f, 0.86f, 1.0f ) );
+                }
+                char tile_label[64];
+                std::snprintf( tile_label, sizeof( tile_label ), "%s##gt%d", targets[ti].label, ti );
+                if( ImGui::Button( tile_label, ImVec2( 72.0f, 26.0f ) ) ) {
+                    g_ground_target = ti;
+                    g_selected_ground = -1;
+                }
+                if( g_ground_target == ti ) {
+                    ImGui::PopStyleColor();
+                }
+            }
+        }
+        ImGui::Separator();
+
+        map &here = get_map();
+        map_stack stack = here.i_at( ground );
+        if( ImGui::BeginChild( "aim_ground_list", ImVec2( 0.0f, 330.0f ), true ) ) {
+            if( stack.empty() ) {
+                ImGui::TextDisabled( "这一格没有物品。" );
+            }
+            int idx = 0;
+            for( item *it : stack ) {
+                if( it == nullptr ) {
+                    ++idx;
+                    continue;
+                }
+                const int amount = ground_pickup_amount( *it );
+                char row_label[160];
+                std::snprintf( row_label, sizeof( row_label ), "%s ×%d##ground%d",
+                               it->tname().c_str(), it->count(), idx );
+                if( ImGui::Selectable( row_label, g_selected_ground == idx,
+                                       ImGuiSelectableFlags_AllowDoubleClick ) ) {
+                    g_selected_ground = idx;
+                    if( ImGui::IsMouseDoubleClicked( ImGuiMouseButton_Left ) ) {
+                        aim_ground_request request{ idx, it->typeId(), amount };
+                        submit_pickup( request );
+                    }
+                }
+                if( ImGui::BeginDragDropSource() ) {
+                    char payload[160];
+                    std::snprintf( payload, sizeof( payload ), "%d|%s|%d", idx,
+                                   it->typeId().str().c_str(), amount );
+                    ImGui::SetDragDropPayload( "GROUND_ITEM", payload, std::strlen( payload ) + 1 );
+                    ImGui::Text( "拾取：%s（%d 件）", it->tname().c_str(), amount );
+                    ImGui::EndDragDropSource();
+                }
+
+                char ctx_id[64];
+                std::snprintf( ctx_id, sizeof( ctx_id ), "aim_ground_context##%d", idx );
+                if( ImGui::IsItemClicked( ImGuiMouseButton_Right ) ) {
+                    ImGui::OpenPopup( ctx_id );
+                }
+                if( ImGui::BeginPopup( ctx_id ) ) {
+                    ImGui::BeginDisabled( g_pickup_pending );
+                    if( ImGui::MenuItem( "拾取到背包" ) ) {
+                        aim_ground_request request{ idx, it->typeId(), amount };
+                        submit_pickup( request );
+                    }
+                    ImGui::EndDisabled();
+                    ImGui::EndPopup();
+                }
+                ImGui::SameLine( 260.0f );
+                ImGui::TextDisabled( "拖到左侧背包" );
+                ++idx;
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::Separator();
+        ImGui::BeginDisabled( g_pickup_pending || g_selected_ground < 0 );
+        if( ImGui::Button( g_pickup_pending ? "拾取已提交" : "拾取选中：地面 → 背包",
+                           ImVec2( -1.0f, 0.0f ) ) ) {
+            int idx = 0;
+            for( item *it : stack ) {
+                if( idx == g_selected_ground && it != nullptr ) {
+                    const int amount = ground_pickup_amount( *it );
+                    aim_ground_request request{ idx, it->typeId(), amount };
+                    submit_pickup( request );
+                    break;
+                }
+                ++idx;
+            }
+        }
+        ImGui::EndDisabled();
+
+        ImGui::Button( "把背包物品拖到这里丢下", ImVec2( -1.0f, 30.0f ) );
+        if( ImGui::BeginDragDropTarget() ) {
+            if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "AIM_ROW" ) ) {
+                const std::string key( static_cast<const char *>( payload->Data ),
+                                       static_cast<std::size_t>( payload->DataSize ) - 1 );
+                const int idx = find_row_index( snap, key );
+                if( idx >= 0 ) {
+                    const aim_row &dropped = snap.rows[static_cast<std::size_t>( idx )];
+                    const int amount = g_selected == idx ?
+                                       std::max( 1, std::min( g_move_amount, dropped.count ) ) : 1;
+                    submit_move( dropped, amount, targets[g_ground_target] );
+                } else {
+                    g_status = "拖放来源已失效，请重新选择";
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ImGui::TextDisabled( "容量、重量与耗时由 ACT_PICKUP / ACT_MOVE_ITEMS 判定。" );
+        if( g_pickup_pending || g_move_pending ) {
+            ImGui::TextDisabled( "已提交：按 F10 关闭覆盖层推进时间。" );
+        }
+    }
+    ImGui::End();
+    if( !ground_open ) {
+        g_ground_open = false;
+    }
 }
 
 } // namespace aim

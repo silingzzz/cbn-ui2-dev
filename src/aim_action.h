@@ -53,4 +53,22 @@ auto aim_move_items( Character &who, int stack_index, const itype_id &type,
 auto aim_move_one( Character &who, int stack_index, const itype_id &type,
                    tripoint_rel_ms dest ) -> aim_move_result;
 
+/// Ground-to-backpack pickup request.  The index/type pair is validated against
+/// the map stack at execution time, mirroring the inventory requests above.
+struct aim_ground_request {
+    int stack_index = -1;
+    itype_id type;
+    int amount = 0;
+};
+
+enum class aim_pickup_result {
+    started,
+    stale_selection,
+};
+
+/// Assign `ACT_PICKUP` for items lying on `ground`.  Volume, weight, ownership
+/// and thief prompts stay inside `pickup_activity_actor`; the UI only selects.
+auto aim_pickup_items( Character &who, const tripoint_bub_ms &ground,
+                       const std::vector<aim_ground_request> &requests ) -> aim_pickup_result;
+
 #endif // CATA_SRC_AIM_ACTION_H

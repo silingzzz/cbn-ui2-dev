@@ -1,6 +1,7 @@
 #include "aim_action.h"
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <vector>
 
@@ -8,6 +9,9 @@
 #include "character.h"
 #include "inventory.h"
 #include "item.h"
+#include "map/map.h"
+#include "pickup.h"
+#include "pickup_token.h"
 #include "player_activity.h"
 
 namespace
@@ -109,4 +113,45 @@ auto aim_move_one( Character &who, int stack_index, const itype_id &type,
                    tripoint_rel_ms dest ) -> aim_move_result
 {
     return aim_move_items( who, stack_index, type, 1, dest );
+}
+
+auto aim_pickup_items( Character &who, const tripoint_bub_ms &ground,
+                       const std::vector<aim_ground_request> &requests ) -> aim_pickup_result
+{
+    if( requests.empty() ) {
+        return aim_pickup_result::stale_selection;
+    }
+
+    map &here = get_map();
+    map_stack stack = here.i_at( ground );
+    std::vector<pickup::pick_drop_selection> selections;
+    selections.reserve( requests.size() );
+
+    for( const aim_ground_request &request : requests ) {
+        if( request.amount <= 0 || request.stack_index < 0 ||
+            request.stack_index >= static_cast<int>( stack.size() ) ) {
+            return aim_pickup_result::stale_selection;
+        }
+        auto iter = stack.begin();
+        std::advance( iter, request.stack_index );
+        item *it = *iter;
+        if( it == nullptr || it->typeId() != request.type ) {
+            return aim_pickup_result::stale_selection;
+        }
+        const int available = it->count_by_charges() ? it->charges : 1;
+        if( available < request.amount ) {
+            return aim_pickup_result::stale_selection;
+        }
+        pickup::pick_drop_selection selection;
+        selection.target = it;
+        if( it->count_by_charges() ) {
+            selection.quantity = request.amount;
+        }
+        selections.push_back( selection );
+    }
+
+    who.assign_activity( std::make_unique<player_activity>(
+                             std::make_unique<pickup_activity_actor>(
+                                 selections, who.bub_pos() ) ) );
+    return aim_pickup_result::started;
 }
