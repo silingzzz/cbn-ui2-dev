@@ -16,6 +16,7 @@
 #include "avatar.h"
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
+#include "cata_imgui_ui2_messages.h"
 #include "cata_imgui_ui2_zone.h"
 #include "inventory.h"
 #include "item.h"
@@ -354,6 +355,10 @@ void draw()
     ImGui::SameLine();
     if( ImGui::Button( "区域", ImVec2( 60.0f, 0.0f ) ) ) {
         ui2::zone::toggle();
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( ui2::messages::is_open() ? "收起消息" : "消息", ImVec2( 80.0f, 0.0f ) ) ) {
+        ui2::messages::toggle();
     }
     ImGui::SameLine();
     if( ImGui::Button( g_ground_open ? "收起地面" : "地面物品", ImVec2( 80.0f, 0.0f ) ) ) {
