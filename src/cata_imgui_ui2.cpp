@@ -3,6 +3,7 @@
 #include "cata_imgui_ui2_menu.h"
 #include "cata_imgui_ui2_focus.h"
 #include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
 
 #if defined( TILES )
@@ -207,6 +208,8 @@ void draw()
     ui2::aim::draw();
     // PR-3A: read-only worn/wielded equipment and nested containers.
     ui2::gear::draw();
+    // PR-4A: recipe browser with a direct path into the existing craft flow.
+    ui2::craft::draw();
 }
 
 } // namespace ui2
