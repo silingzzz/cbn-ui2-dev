@@ -30,6 +30,8 @@ bool g_open_delete_popup = false;
 char g_filter[64] = "";
 
 bool g_map_select_request = false;
+bool g_map_select_for_edit = false;
+zone_data *g_edit_target = nullptr;
 bool g_has_pending_rect = false;
 tripoint_abs_ms g_pending_start;
 tripoint_abs_ms g_pending_end;
@@ -109,8 +111,33 @@ void run_map_select_flow()
     const tripoint_bub_ms high( std::max( first.position->x(), second.position->x() ),
                                 std::max( first.position->y(), second.position->y() ),
                                 std::max( first.position->z(), second.position->z() ) );
-    g_pending_start = bub_to_abs( low );
-    g_pending_end = bub_to_abs( high );
+    const tripoint_abs_ms start = bub_to_abs( low );
+    const tripoint_abs_ms end = bub_to_abs( high );
+
+    if( g_map_select_for_edit && g_edit_target != nullptr ) {
+        zone_manager &mgr = zone_manager::get_manager();
+        bool alive = false;
+        for( zone_manager::ref_zone_data ref : mgr.get_zones() ) {
+            if( &ref.get() == g_edit_target ) {
+                alive = true;
+                break;
+            }
+        }
+        if( alive ) {
+            g_edit_target->set_position( { start, end } );
+            mgr.zone_edited( *g_edit_target );
+            mgr.save_zones();
+            g_selected = g_edit_target;
+            add_msg( m_info, _( "区域“%s”的范围已更新。" ), g_edit_target->get_name() );
+        }
+        g_map_select_for_edit = false;
+        g_edit_target = nullptr;
+        g_open = true;
+        return;
+    }
+
+    g_pending_start = start;
+    g_pending_end = end;
     g_has_pending_rect = true;
     g_open = true;
     g_selected = nullptr;
@@ -158,6 +185,8 @@ void draw()
     ImGui::SameLine();
     if( ImGui::Button( "框选新建区域…" ) ) {
         g_map_select_request = true;
+        g_map_select_for_edit = false;
+        g_edit_target = nullptr;
         g_open = false;
         if( ui2::aim::is_open() ) {
             ui2::aim::toggle();
@@ -289,11 +318,21 @@ void draw()
             g_toggle_request = &z;
         }
         ImGui::SameLine();
+        if( ImGui::Button( "重选范围…", ImVec2( 130.0f, 0.0f ) ) ) {
+            g_map_select_request = true;
+            g_map_select_for_edit = true;
+            g_edit_target = &z;
+            g_open = false;
+            if( ui2::aim::is_open() ) {
+                ui2::aim::toggle();
+            }
+            add_msg( m_info, _( "在地图上重新框选“%s”的范围。" ), z.get_name() );
+        }
+        ImGui::SameLine();
         if( ImGui::Button( "删除该区域…", ImVec2( 130.0f, 0.0f ) ) ) {
             g_delete_candidate = &z;
             g_open_delete_popup = true;
         }
-        ImGui::SameLine();
         ImGui::TextDisabled( "切换后由 zone_manager 保存。" );
     }
     ImGui::EndChild();
