@@ -27,6 +27,8 @@ item *g_selected_parent = nullptr;
 
 /// One item-use request, consumed later by game::handle_action.
 item *g_deferred_use = nullptr;
+/// Restore the gear window after the game's own item UI returns.
+bool g_reopen_after_use = false;
 
 enum class pending_kind {
     none,
@@ -399,6 +401,7 @@ bool take_deferred_action()
     }
     if( !still_owned ) {
         get_avatar().add_msg_if_player( m_info, "该物品已不在装备栏，取消使用。" );
+        g_reopen_after_use = false;
         return true;
     }
 
@@ -406,6 +409,13 @@ bool take_deferred_action()
     g_selected = nullptr;
     g_selected_parent = nullptr;
     avatar_action::use_item( get_avatar(), requested );
+    if( g_reopen_after_use ) {
+        g_reopen_after_use = false;
+        g_open = true;
+        if( !cata_imgui::is_open() ) {
+            cata_imgui::toggle();
+        }
+    }
     return true;
 }
 
@@ -549,6 +559,7 @@ void draw()
                     ImGui::Spacing();
                     if( ImGui::Button( "使用", ImVec2( 90.0f, 0.0f ) ) ) {
                         g_pending = { pending_kind::use, &it, nullptr, nullptr };
+                        g_reopen_after_use = true;
                         // The game action opens its own UI; hide the overlay so the
                         // player sees that UI rather than this paused frame.
                         g_open = false;
