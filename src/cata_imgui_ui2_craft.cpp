@@ -204,10 +204,12 @@ void draw()
                 ImGui::TextWrapped( "%s", all.empty() ? "（无组件或工具要求）" : all.c_str() );
                 ImGui::TreePop();
             }
+            bool is_crafting = false;
             if( you.activity ) {
                 const std::string act_id = you.activity->id().str();
+                is_crafting = act_id == "ACT_CRAFT";
                 ImGui::TextDisabled( "当前活动：%s", act_id.c_str() );
-                if( act_id == "ACT_CRAFT" ) {
+                if( is_crafting ) {
                     const int moves_left = std::max( 0, you.activity->get_moves_left() );
                     if( g_activity_total_moves > 0 ) {
                         const float pct = std::clamp(
@@ -221,36 +223,41 @@ void draw()
                     } else {
                         ImGui::TextDisabled( "剩余 %d 步", moves_left );
                     }
-                    if( ImGui::Button( "取消当前制作" ) ) {
-                        g_pending_cancel = true;
-                    }
-                    ImGui::SameLine();
-                    ImGui::TextDisabled( "取消会丢弃已预扣的组件，原样走游戏 canceled 回调。" );
                 }
             } else {
                 ImGui::TextDisabled( "当前没有进行中的活动" );
             }
             ImGui::Separator();
-            ImGui::SetNextItemWidth( 100.0f );
-            ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
-            g_batch = std::max( 1, std::min( g_batch, 50 ) );
-            ImGui::SameLine();
-            if( !can_make ) {
-                ImGui::BeginDisabled();
-            }
-            if( ImGui::Button( "制作 1 次" ) ) {
-                start_craft( rec, 1 );
-            }
-            ImGui::SameLine();
-            if( ImGui::Button( "制作 N 次" ) ) {
-                start_craft( rec, g_batch );
-            }
-            if( !can_make ) {
-                ImGui::EndDisabled();
+            if( is_crafting ) {
+                if( ImGui::Button( "取消当前制作（丢弃已预扣的组件）" ) ) {
+                    g_pending_cancel = true;
+                }
+            } else {
+                ImGui::SetNextItemWidth( 100.0f );
+                ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
+                g_batch = std::max( 1, std::min( g_batch, 50 ) );
                 ImGui::SameLine();
-                ImGui::TextDisabled( "（材料或工具不足，已禁用）" );
+                if( !can_make ) {
+                    ImGui::BeginDisabled();
+                }
+                if( ImGui::Button( "制作 1 次" ) ) {
+                    start_craft( rec, 1 );
+                }
+                ImGui::SameLine();
+                if( ImGui::Button( "制作 N 次" ) ) {
+                    start_craft( rec, g_batch );
+                }
+                if( !can_make ) {
+                    ImGui::EndDisabled();
+                    ImGui::SameLine();
+                    ImGui::TextDisabled( "（材料或工具不足，已禁用）" );
+                }
             }
-            ImGui::TextDisabled( "批量制作仍走原 make_craft；队列、优先级与状态由游戏活动系统管理。" );
+            if( is_crafting ) {
+                ImGui::TextDisabled( "取消会丢弃已预扣的组件，原样走游戏 canceled 回调。" );
+            } else {
+                ImGui::TextDisabled( "批量制作仍走原 make_craft；队列、优先级与状态由游戏活动系统管理。" );
+            }
         }
     }
     ImGui::EndChild();
