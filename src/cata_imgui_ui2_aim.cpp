@@ -2,16 +2,19 @@
 
 #if defined( TILES )
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
 
 #include <imgui.h>
 
+#include "aim_action.h"
 #include "aim_snapshot.h"
 #include "avatar.h"
 #include "inventory.h"
 #include "item.h"
+#include "messages.h"
 #include "output.h"
 #include "units.h"
 
@@ -19,9 +22,9 @@ namespace
 {
 
 // ---------------------------------------------------------------------------
-// PR-2A AIM-1: READ-ONLY real backpack view.
-// Nothing in this file modifies game state: no item is moved, used or dropped.
-// The snapshot is rebuilt every frame and never stores item pointers.
+// PR-2A AIM-2: real backpack view with a one-item move command.
+// The UI only builds an activity request; ACT_MOVE_ITEMS still owns capacity,
+// weight, ownership and placement checks. Nothing here moves an item directly.
 // ---------------------------------------------------------------------------
 
 bool g_open = false;
@@ -29,7 +32,9 @@ char g_search[64] = "";
 std::string g_category;   // empty = all categories
 int g_selected = -1;      // index into the snapshot rows of the current frame
 std::string g_selected_key;   // "category|type|stack" identity for re-validation
-std::string g_status = "每帧重建快照 · 只读";
+int g_dest_index = 0;
+bool g_move_pending = false;
+std::string g_status = "每帧重建快照 · 可移动 1 件";
 
 auto to_kg( units::mass m ) -> double
 {
@@ -67,31 +72,28 @@ void draw_detail( const aim_row &row )
     ImGui::TextDisabled( "分类：%s　数量：%d　重量：%.2f kg　体积：%.2f L",
                          row.category_name.c_str(), row.count, to_kg( row.weight ), to_l( row.volume ) );
     ImGui::Separator();
-    if( ImGui::BeginChild( "aim_detail", ImVec2( 0.0f, 0.0f ), false ) ) {
-        for( const iteminfo &ii : items.front()->info() ) {
-            // Mirrors format_item_info(): <num> is replaced by sValue only when
-            // the entry has a real numeric value; -999 means "no value".
-            std::string line = ii.bDrawName ? ii.sName : "";
-            if( ii.sType != "DESCRIPTION" ) {
-                const std::string fmt = ii.sFmt;
-                const std::size_t num_pos = fmt.find( "<num>" );
-                if( num_pos != std::string::npos ) {
-                    line += fmt.substr( 0, num_pos );
-                    if( ii.sValue != "-999" ) {
-                        line += ii.sValue;
-                    }
-                    line += fmt.substr( num_pos + 5 );
-                } else {
-                    line += fmt;
+    for( const iteminfo &ii : items.front()->info() ) {
+        // Mirrors format_item_info(): <num> is replaced by sValue only when
+        // the entry has a real numeric value; -999 means "no value".
+        std::string line = ii.bDrawName ? ii.sName : "";
+        if( ii.sType != "DESCRIPTION" ) {
+            const std::string fmt = ii.sFmt;
+            const std::size_t num_pos = fmt.find( "<num>" );
+            if( num_pos != std::string::npos ) {
+                line += fmt.substr( 0, num_pos );
+                if( ii.sValue != "-999" ) {
+                    line += ii.sValue;
                 }
-            }
-            line = remove_color_tags( line );
-            if( !line.empty() ) {
-                ImGui::TextWrapped( "%s", line.c_str() );
+                line += fmt.substr( num_pos + 5 );
+            } else {
+                line += fmt;
             }
         }
+        line = remove_color_tags( line );
+        if( !line.empty() ) {
+            ImGui::TextWrapped( "%s", line.c_str() );
+        }
     }
-    ImGui::EndChild();
 }
 
 } // namespace
@@ -119,6 +121,12 @@ void draw()
 
     const aim_snapshot snap = build_aim_snapshot( get_avatar() );
 
+    // The activity owns the move from here on; once the game has consumed it the
+    // button becomes available again on the next open.
+    if( g_move_pending && !get_avatar().activity ) {
+        g_move_pending = false;
+    }
+
     // Re-validate the selection against the freshly built snapshot: item has no
     // stable per-instance id, so identity is (category, type, stack slot).
     if( g_selected >= 0 ) {
@@ -138,8 +146,8 @@ void draw()
     }
 
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 60.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 780.0f, 520.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "新版 AIM（开发预览）· 只读", &g_open ) ) {
+    ImGui::SetNextWindowSize( ImVec2( 820.0f, 560.0f ), ImGuiCond_FirstUseEver );
+    if( !ImGui::Begin( "新版 AIM（开发预览）· 单件移动", &g_open ) ) {
         ImGui::End();
         return;
     }
@@ -172,7 +180,7 @@ void draw()
 
     const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
 
-    const float list_width = 440.0f;
+    const float list_width = 460.0f;
     if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
         if( visible.empty() ) {
             ImGui::Dummy( ImVec2( 0.0f, 40.0f ) );
@@ -193,7 +201,7 @@ void draw()
                     g_selected_key = row_key( row );
                     g_status = "已选中";
                 }
-                ImGui::SameLine( 260.0f );
+                ImGui::SameLine( 270.0f );
                 ImGui::TextDisabled( "%s ｜ x%d ｜ %.2f kg ｜ %.2f L", row.category_name.c_str(),
                                      row.count, to_kg( row.weight ), to_l( row.volume ) );
             }
@@ -202,13 +210,61 @@ void draw()
     ImGui::EndChild();
 
     ImGui::SameLine();
-    if( ImGui::BeginChild( "aim_detail_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
+    if( ImGui::BeginChild( "aim_right_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
+        const float inner_height = ImGui::GetContentRegionAvail().y;
+        if( ImGui::BeginChild( "aim_detail_scroll", ImVec2( 0.0f, std::max( 120.0f, inner_height - 176.0f ) ),
+                               false ) ) {
+            if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
+                draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
+            } else {
+                ImGui::TextDisabled( "选择左侧物品查看真实详情" );
+                ImGui::Separator();
+                ImGui::TextDisabled( "右侧下方可选择落点并移动 1 件。" );
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::Separator();
+        ImGui::TextDisabled( "移动 1 件到地图" );
         if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
-            draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
+            const aim_row &row = snap.rows[static_cast<std::size_t>( g_selected )];
+            const auto &targets = aim_move_targets();
+            ImGui::Text( "物品：%s", row.name.c_str() );
+            ImGui::SetNextItemWidth( -1.0f );
+            if( ImGui::BeginCombo( "##move_dest", targets[g_dest_index].label ) ) {
+                for( int i = 0; i < static_cast<int>( targets.size() ); ++i ) {
+                    if( ImGui::Selectable( targets[i].label, g_dest_index == i ) ) {
+                        g_dest_index = i;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::BeginDisabled( g_move_pending );
+            if( ImGui::Button( g_move_pending ? "已提交，等待执行" : "移动 1 件", ImVec2( -1.0f, 0.0f ) ) ) {
+                const aim_move_result result = aim_move_one(
+                                                  get_avatar(), row.stack_index, row.type_id, targets[g_dest_index].offset );
+                if( result == aim_move_result::started ) {
+                    g_move_pending = true;
+                    char msg[512];
+                    std::snprintf( msg, sizeof( msg ),
+                                   "已提交：%s → %s，移动 1 件。按 F10 关闭覆盖层，游戏才会推进并执行。",
+                                   row.name.c_str(), targets[g_dest_index].label );
+                    g_status = msg;
+                    add_msg( m_info, "已提交移动：%s → %s（1 件）", row.name.c_str(),
+                             targets[g_dest_index].label );
+                } else {
+                    g_selected = -1;
+                    g_selected_key.clear();
+                    g_status = "背包已变化：选择已清除，请重新选择";
+                }
+            }
+            ImGui::EndDisabled();
+            ImGui::TextDisabled( "容量、重量、归属与落点由 ACT_MOVE_ITEMS 判定。" );
+            if( g_move_pending ) {
+                ImGui::TextDisabled( "已提交：按 F10 关闭覆盖层推进时间。" );
+            }
         } else {
-            ImGui::TextDisabled( "选择左侧物品查看真实详情" );
-            ImGui::Separator();
-            ImGui::TextDisabled( "本窗口只读：不会移动、使用或丢弃任何物品。" );
+            ImGui::TextDisabled( "先选中左侧物品。" );
         }
     }
     ImGui::EndChild();
@@ -216,7 +272,7 @@ void draw()
     ImGui::Separator();
     ImGui::TextDisabled( "%s", g_status.c_str() );
     ImGui::SameLine();
-    ImGui::TextDisabled( "｜数据源：Character::inv（穿戴/手持/地面/载具不在本阶段范围）" );
+    ImGui::TextDisabled( "｜数据源：Character::inv（其余操作仍走旧 AIM）" );
 
     ImGui::End();
 }
