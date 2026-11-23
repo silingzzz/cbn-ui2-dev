@@ -31,6 +31,7 @@ int g_batch = 1;
 char g_search[128] = "";
 // Total steps of the craft started from this window; used for the progress bar.
 int g_activity_total_moves = 0;
+bool g_pending_cancel = false;
 
 auto plain_text( const std::string &raw ) -> std::string
 {
@@ -227,6 +228,13 @@ void draw()
                 ImGui::TextDisabled( "当前没有进行中的活动" );
             }
             ImGui::Separator();
+            if( is_crafting ) {
+                if( ImGui::Button( "取消当前制作（丢弃已预扣组件）", ImVec2( 340.0f, 0.0f ) ) ) {
+                    g_pending_cancel = true;
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled( "取消会丢弃已预扣的组件。" );
+            }
             ImGui::SetNextItemWidth( 100.0f );
             ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
             g_batch = std::max( 1, std::min( g_batch, 50 ) );
@@ -247,7 +255,7 @@ void draw()
                 ImGui::TextDisabled( "（材料或工具不足，已禁用）" );
             }
             if( is_crafting ) {
-                ImGui::TextDisabled( "制作进行中；进度与剩余步数见上。取消走游戏原有 ESC/移动打断流程。" );
+                ImGui::TextDisabled( "制作进行中；进度与剩余步数见上，可点上方按钮取消。" );
             } else {
                 ImGui::TextDisabled( "批量制作仍走原 make_craft；队列、优先级与状态由游戏活动系统管理。" );
             }
@@ -256,6 +264,16 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
+
+    if( g_pending_cancel ) {
+        g_pending_cancel = false;
+        if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+            you.cancel_activity();
+            you.invalidate_crafting_inventory();
+            g_activity_total_moves = 0;
+            add_msg( m_info, "新版制作：已取消当前制作。" );
+        }
+    }
 }
 
 } // namespace craft
