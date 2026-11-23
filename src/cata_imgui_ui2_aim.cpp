@@ -22,7 +22,7 @@ namespace
 {
 
 // ---------------------------------------------------------------------------
-// PR-2A AIM-2: real backpack view with a one-item move command.
+// PR-2A AIM-2: real backpack view with a one-to-N item move command.
 // The UI only builds an activity request; ACT_MOVE_ITEMS still owns capacity,
 // weight, ownership and placement checks. Nothing here moves an item directly.
 // ---------------------------------------------------------------------------
@@ -33,8 +33,9 @@ std::string g_category;   // empty = all categories
 int g_selected = -1;      // index into the snapshot rows of the current frame
 std::string g_selected_key;   // "category|type|stack" identity for re-validation
 int g_dest_index = 0;
+int g_move_amount = 1;
 bool g_move_pending = false;
-std::string g_status = "每帧重建快照 · 可移动 1 件";
+std::string g_status = "每帧重建快照 · 可移动物品";
 
 auto to_kg( units::mass m ) -> double
 {
@@ -96,6 +97,36 @@ void draw_detail( const aim_row &row )
     }
 }
 
+auto find_row_index( const aim_snapshot &snap, const std::string &key ) -> int
+{
+    for( std::size_t i = 0; i < snap.rows.size(); ++i ) {
+        if( row_key( snap.rows[i] ) == key ) {
+            return static_cast<int>( i );
+        }
+    }
+    return -1;
+}
+
+auto submit_move( const aim_row &row, int amount, const aim_move_target &target ) -> aim_move_result
+{
+    const aim_move_result result = aim_move_items(
+                                      get_avatar(), row.stack_index, row.type_id, amount, target.offset );
+    if( result == aim_move_result::started ) {
+        g_move_pending = true;
+        char msg[512];
+        std::snprintf( msg, sizeof( msg ),
+                       "已提交：%s → %s，移动 %d 件。按 F10 关闭覆盖层，游戏才会推进并执行。",
+                       row.name.c_str(), target.label, amount );
+        g_status = msg;
+        add_msg( m_info, "已提交移动：%s → %s（%d 件）", row.name.c_str(), target.label, amount );
+    } else {
+        g_selected = -1;
+        g_selected_key.clear();
+        g_status = "背包已变化：选择已清除，请重新选择";
+    }
+    return result;
+}
+
 } // namespace
 
 namespace ui2
@@ -147,7 +178,7 @@ void draw()
 
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 60.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 820.0f, 560.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "新版 AIM（开发预览）· 单件移动", &g_open ) ) {
+    if( !ImGui::Begin( "新版 AIM（开发预览）· 背包移动", &g_open ) ) {
         ImGui::End();
         return;
     }
@@ -179,6 +210,14 @@ void draw()
     ImGui::Separator();
 
     const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
+    const auto &targets = aim_move_targets();
+
+    auto select_row = [&snap]( std::size_t idx ) {
+        g_selected = static_cast<int>( idx );
+        g_selected_key = row_key( snap.rows[idx] );
+        g_move_amount = 1;
+        g_status = "已选中";
+    };
 
     const float list_width = 460.0f;
     if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
@@ -197,10 +236,39 @@ void draw()
                 char label[256];
                 std::snprintf( label, sizeof( label ), "%s##%zu", row.name.c_str(), idx );
                 if( ImGui::Selectable( label, g_selected == static_cast<int>( idx ) ) ) {
-                    g_selected = static_cast<int>( idx );
-                    g_selected_key = row_key( row );
-                    g_status = "已选中";
+                    select_row( idx );
                 }
+                const bool row_right_clicked = ImGui::IsItemClicked( ImGuiMouseButton_Right );
+                if( row_right_clicked ) {
+                    select_row( idx );
+                }
+
+                std::string drag_key = row_key( row );
+                if( ImGui::BeginDragDropSource() ) {
+                    ImGui::SetDragDropPayload( "AIM_ROW", drag_key.c_str(), drag_key.size() + 1 );
+                    ImGui::Text( "移动：%s（%d 件）", row.name.c_str(), g_move_amount );
+                    ImGui::EndDragDropSource();
+                }
+
+                char ctx_id[64];
+                std::snprintf( ctx_id, sizeof( ctx_id ), "aim_row_context##%zu", idx );
+                if( row_right_clicked ) {
+                    ImGui::OpenPopup( ctx_id );
+                }
+                if( ImGui::BeginPopup( ctx_id ) ) {
+                    char entry[160];
+                    std::snprintf( entry, sizeof( entry ), "移动 %d 件到%s", g_move_amount,
+                                   targets[g_dest_index].label );
+                    ImGui::BeginDisabled( g_move_pending );
+                    if( ImGui::MenuItem( entry ) ) {
+                        submit_move( row, g_move_amount, targets[g_dest_index] );
+                    }
+                    ImGui::EndDisabled();
+                    ImGui::Separator();
+                    ImGui::MenuItem( "拖到右侧九宫格也可移动", nullptr, false, false );
+                    ImGui::EndPopup();
+                }
+
                 ImGui::SameLine( 270.0f );
                 ImGui::TextDisabled( "%s ｜ x%d ｜ %.2f kg ｜ %.2f L", row.category_name.c_str(),
                                      row.count, to_kg( row.weight ), to_l( row.volume ) );
@@ -212,51 +280,82 @@ void draw()
     ImGui::SameLine();
     if( ImGui::BeginChild( "aim_right_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
         const float inner_height = ImGui::GetContentRegionAvail().y;
-        if( ImGui::BeginChild( "aim_detail_scroll", ImVec2( 0.0f, std::max( 120.0f, inner_height - 176.0f ) ),
+        if( ImGui::BeginChild( "aim_detail_scroll", ImVec2( 0.0f, std::max( 120.0f, inner_height - 268.0f ) ),
                                false ) ) {
             if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
                 draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
             } else {
                 ImGui::TextDisabled( "选择左侧物品查看真实详情" );
                 ImGui::Separator();
-                ImGui::TextDisabled( "右侧下方可选择落点并移动 1 件。" );
+                ImGui::TextDisabled( "右侧下方选择落点并移动。" );
             }
         }
         ImGui::EndChild();
 
         ImGui::Separator();
-        ImGui::TextDisabled( "移动 1 件到地图" );
+        ImGui::TextDisabled( "移动 1–N 件到地图" );
         if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
             const aim_row &row = snap.rows[static_cast<std::size_t>( g_selected )];
-            const auto &targets = aim_move_targets();
-            ImGui::Text( "物品：%s", row.name.c_str() );
-            ImGui::SetNextItemWidth( -1.0f );
-            if( ImGui::BeginCombo( "##move_dest", targets[g_dest_index].label ) ) {
-                for( int i = 0; i < static_cast<int>( targets.size() ); ++i ) {
-                    if( ImGui::Selectable( targets[i].label, g_dest_index == i ) ) {
-                        g_dest_index = i;
+            ImGui::Text( "物品：%s（最多 %d 件）", row.name.c_str(), row.count );
+
+            // 3x3 ground grid around the player. Clicking a cell only selects the
+            // destination; the explicit button below still owns the commit.
+            static const int grid[3][3] = { { 8, 1, 2 }, { 7, 0, 3 }, { 6, 5, 4 } };
+            ImGui::BeginDisabled( g_move_pending );
+            for( int gy = 0; gy < 3; ++gy ) {
+                for( int gx = 0; gx < 3; ++gx ) {
+                    const int ti = grid[gy][gx];
+                    if( gx > 0 ) {
+                        ImGui::SameLine();
+                    }
+                    if( g_dest_index == ti ) {
+                        ImGui::PushStyleColor( ImGuiCol_Button, ImVec4( 0.24f, 0.52f, 0.86f, 1.0f ) );
+                    }
+                    char dest_label[64];
+                    std::snprintf( dest_label, sizeof( dest_label ), "%s##dest%d", targets[ti].label, ti );
+                    if( ImGui::Button( dest_label, ImVec2( 72.0f, 26.0f ) ) ) {
+                        g_dest_index = ti;
+                        g_status = "已选择落点";
+                    }
+                    if( g_dest_index == ti ) {
+                        ImGui::PopStyleColor();
+                    }
+
+                    if( ImGui::BeginDragDropTarget() ) {
+                        if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "AIM_ROW" ) ) {
+                            const std::string key( static_cast<const char *>( payload->Data ),
+                                                   static_cast<std::size_t>( payload->DataSize ) - 1 );
+                            const int idx = find_row_index( snap, key );
+                            if( idx >= 0 ) {
+                                const aim_row &dropped = snap.rows[static_cast<std::size_t>( idx )];
+                                const int amount = g_selected == idx ?
+                                                   std::max( 1, std::min( g_move_amount, dropped.count ) ) : 1;
+                                if( g_selected != idx ) {
+                                    select_row( static_cast<std::size_t>( idx ) );
+                                }
+                                submit_move( dropped, amount, targets[ti] );
+                            } else {
+                                g_status = "拖放来源已失效，请重新选择";
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
                     }
                 }
-                ImGui::EndCombo();
             }
+            ImGui::EndDisabled();
+
+            ImGui::SetNextItemWidth( 110.0f );
+            ImGui::InputInt( "##move_amount", &g_move_amount, 1, 10 );
+            ImGui::SameLine();
+            ImGui::TextDisabled( "数量（1–%d）", row.count );
+            g_move_amount = std::max( 1, std::min( g_move_amount, row.count ) );
+
             ImGui::BeginDisabled( g_move_pending );
-            if( ImGui::Button( g_move_pending ? "已提交，等待执行" : "移动 1 件", ImVec2( -1.0f, 0.0f ) ) ) {
-                const aim_move_result result = aim_move_one(
-                                                  get_avatar(), row.stack_index, row.type_id, targets[g_dest_index].offset );
-                if( result == aim_move_result::started ) {
-                    g_move_pending = true;
-                    char msg[512];
-                    std::snprintf( msg, sizeof( msg ),
-                                   "已提交：%s → %s，移动 1 件。按 F10 关闭覆盖层，游戏才会推进并执行。",
-                                   row.name.c_str(), targets[g_dest_index].label );
-                    g_status = msg;
-                    add_msg( m_info, "已提交移动：%s → %s（1 件）", row.name.c_str(),
-                             targets[g_dest_index].label );
-                } else {
-                    g_selected = -1;
-                    g_selected_key.clear();
-                    g_status = "背包已变化：选择已清除，请重新选择";
-                }
+            char move_label[96];
+            std::snprintf( move_label, sizeof( move_label ), "移动 %d 件 → %s", g_move_amount,
+                           targets[g_dest_index].label );
+            if( ImGui::Button( g_move_pending ? "已提交，等待执行" : move_label, ImVec2( -1.0f, 0.0f ) ) ) {
+                submit_move( row, g_move_amount, targets[g_dest_index] );
             }
             ImGui::EndDisabled();
             ImGui::TextDisabled( "容量、重量、归属与落点由 ACT_MOVE_ITEMS 判定。" );

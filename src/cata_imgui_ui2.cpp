@@ -171,7 +171,7 @@ void draw_controls_window()
     ImGui::SameLine();
     ImGui::Checkbox( "示例子窗口", &g_second_open );
     ImGui::Text( "标签：%s（切换 %d 次）", k_tab_names[g_tab_index], g_tab_switch_count );
-    // PR-2A AIM-2 development preview: real backpack plus one-item move.
+    // PR-2A AIM-2 development preview: real backpack plus inventory move.
     if( ImGui::Button( "打开新版 AIM（开发预览）" ) ) {
         ui2::aim::toggle();
     }

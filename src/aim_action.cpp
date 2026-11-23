@@ -32,9 +32,13 @@ auto aim_move_targets() -> const std::array<aim_move_target, 9> &
     return g_targets;
 }
 
-auto aim_move_one( Character &who, int stack_index, const itype_id &type,
-                   tripoint_rel_ms dest ) -> aim_move_result
+auto aim_move_items( Character &who, int stack_index, const itype_id &type,
+                     int amount, tripoint_rel_ms dest ) -> aim_move_result
 {
+    if( amount <= 0 ) {
+        return aim_move_result::stale_selection;
+    }
+
     location_inventory &inv = who.get_inv();
     if( stack_index < 0 || stack_index >= static_cast<int>( inv.size() ) ) {
         return aim_move_result::stale_selection;
@@ -46,18 +50,39 @@ auto aim_move_one( Character &who, int stack_index, const itype_id &type,
     }
 
     const item &first = *stack.front();
-    if( first.count_by_charges() && first.charges <= 0 ) {
+    const int available = first.count_by_charges() ? first.charges :
+                          static_cast<int>( stack.size() );
+    if( available < amount ) {
         return aim_move_result::stale_selection;
     }
 
-    // Charges move one charge; ordinary items move the whole first instance.
-    // The actor's zero quantity means "the entire item", which for a stack of
-    // non-charge items is still exactly one item instance.
-    std::vector<item *> targets = { stack.front() };
-    std::vector<int> quantities = { first.count_by_charges() ? 1 : 0 };
+    std::vector<item *> targets;
+    std::vector<int> quantities;
+    if( first.count_by_charges() ) {
+        // One request carrying the charge count; the actor splits it when it runs.
+        targets.push_back( stack.front() );
+        quantities.push_back( amount );
+    } else {
+        // One instance per request; the actor's zero quantity means "the whole item".
+        targets.reserve( static_cast<std::size_t>( amount ) );
+        quantities.reserve( static_cast<std::size_t>( amount ) );
+        for( int i = 0; i < amount; ++i ) {
+            if( stack[static_cast<std::size_t>( i )] == nullptr ) {
+                return aim_move_result::stale_selection;
+            }
+            targets.push_back( stack[static_cast<std::size_t>( i )] );
+            quantities.push_back( 0 );
+        }
+    }
 
     who.assign_activity( std::make_unique<player_activity>(
                              std::make_unique<move_items_activity_actor>(
                                  targets, quantities, false, dest ) ) );
     return aim_move_result::started;
+}
+
+auto aim_move_one( Character &who, int stack_index, const itype_id &type,
+                   tripoint_rel_ms dest ) -> aim_move_result
+{
+    return aim_move_items( who, stack_index, type, 1, dest );
 }
