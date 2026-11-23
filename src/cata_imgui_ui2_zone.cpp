@@ -19,6 +19,9 @@ namespace
 bool g_open = false;
 zone_data *g_selected = nullptr;
 zone_data *g_toggle_request = nullptr;
+zone_data *g_delete_candidate = nullptr;
+zone_data *g_delete_request = nullptr;
+bool g_open_delete_popup = false;
 char g_filter[64] = "";
 
 bool contains_ci( const std::string &haystack, const std::string &needle )
@@ -136,9 +139,38 @@ void draw()
             g_toggle_request = &z;
         }
         ImGui::SameLine();
+        if( ImGui::Button( "删除该区域…", ImVec2( 130.0f, 0.0f ) ) ) {
+            g_delete_candidate = &z;
+            g_open_delete_popup = true;
+        }
+        ImGui::SameLine();
         ImGui::TextDisabled( "切换后由 zone_manager 保存。" );
     }
     ImGui::EndChild();
+
+    if( g_open_delete_popup ) {
+        g_open_delete_popup = false;
+        ImGui::OpenPopup( "确认删除区域" );
+    }
+
+    if( ImGui::BeginPopupModal( "确认删除区域", nullptr, ImGuiWindowFlags_AlwaysAutoResize ) ) {
+        if( g_delete_candidate != nullptr ) {
+            ImGui::Text( "将删除区域“%s”（类型 %s），此操作不可撤销。",
+                         g_delete_candidate->get_name().c_str(),
+                         g_delete_candidate->get_type().c_str() );
+        }
+        ImGui::Separator();
+        if( ImGui::Button( "确认删除", ImVec2( 120.0f, 0.0f ) ) ) {
+            g_delete_request = g_delete_candidate;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if( ImGui::Button( "取消", ImVec2( 120.0f, 0.0f ) ) ) {
+            g_delete_candidate = nullptr;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 
     ImGui::End();
 
@@ -149,6 +181,31 @@ void draw()
         mgr.zone_edited( z );
         mgr.save_zones();
         add_msg( m_info, "区域“%s”已%s。", z.get_name(), z.get_enabled() ? "启用" : "停用" );
+    }
+
+    if( g_delete_request != nullptr ) {
+        zone_data *target = g_delete_request;
+        g_delete_request = nullptr;
+        g_delete_candidate = nullptr;
+        bool found = false;
+        for( zone_manager::ref_zone_data ref : mgr.get_zones() ) {
+            if( &ref.get() == target ) {
+                found = true;
+                break;
+            }
+        }
+        if( found ) {
+            const std::string name = target->get_name();
+            if( mgr.remove( *target ) ) {
+                mgr.save_zones();
+                if( g_selected == target ) {
+                    g_selected = nullptr;
+                }
+                add_msg( m_info, "区域“%s”已删除。", name );
+            } else {
+                add_msg( m_warning, "区域“%s”删除失败。", name );
+            }
+        }
     }
 }
 
