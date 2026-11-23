@@ -2902,6 +2902,20 @@
   },
   {
     "type": "keybinding",
+    "id": "SCROLL_UP",
+    "category": "HELP_KEYBINDINGS",
+    "name": "Scroll keybinding list up",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_UP" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "SCROLL_DOWN",
+    "category": "HELP_KEYBINDINGS",
+    "name": "Scroll keybinding list down",
+    "bindings": [ { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "EXECUTE",
     "category": "HELP_KEYBINDINGS",
     "name": "Execute action keybinding",
