@@ -646,6 +646,8 @@ void faction_manager::display() const
     input_context ctxt( "FACTION MANAGER" );
     ctxt.register_cardinal();
     ctxt.register_updown();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "ANY_INPUT" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
@@ -909,6 +911,17 @@ void faction_manager::display() const
                     action = "CONFIRM";
                 }
             }
+        }
+        if( action == "SCROLL_UP" ) {
+            if( selection == 0 ) {
+                continue;
+            }
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            if( active_vec_size == 0 || selection + 1 >= active_vec_size ) {
+                continue;
+            }
+            action = "DOWN";
         }
         if( action == "NEXT_TAB" || action == "RIGHT" ) {
             tab = static_cast<tab_mode>( static_cast<int>( tab ) + 1 );

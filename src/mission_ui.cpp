@@ -37,6 +37,8 @@ void game::list_missions()
     int entries_per_page = 0;
     input_context ctxt( "MISSIONS" );
     ctxt.register_cardinal();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     // Mouse: hover moves the mission cursor, click selects the hovered mission.
@@ -220,6 +222,17 @@ void game::list_missions()
                     action = "CONFIRM";
                 }
             }
+        }
+        if( action == "SCROLL_UP" ) {
+            if( selection == 0 ) {
+                continue;
+            }
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            if( umissions.empty() || selection + 1 >= umissions.size() ) {
+                continue;
+            }
+            action = "DOWN";
         }
         if( action == "RIGHT" ) {
             tab = static_cast<tab_mode>( static_cast<int>( tab ) + 1 );

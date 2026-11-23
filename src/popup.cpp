@@ -6,6 +6,7 @@
 
 #include "cached_options.h"
 #include "catacharset.h"
+#include "cursesport.h"
 #include "ime.h"
 #include "input.h"
 #include "output.h"
@@ -282,6 +283,10 @@ query_popup::result query_popup::query_once()
         ctxt.register_action( "LEFT" );
         ctxt.register_action( "RIGHT" );
         ctxt.register_action( "CONFIRM" );
+        // Mouse: hover highlights the option under the pointer, click selects
+        // that option.  The keyboard LEFT/RIGHT/CONFIRM path stays unchanged.
+        ctxt.register_action( "MOUSE_MOVE" );
+        ctxt.register_action( "SELECT" );
         for( const auto &opt : options ) {
             ctxt.register_action( opt.action );
         }
@@ -301,6 +306,29 @@ query_popup::result query_popup::query_once()
     do {
         res.action = ctxt.handle_input();
         res.evt = ctxt.get_raw_input();
+        if( res.action == "MOUSE_MOVE" || res.action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( res.evt.mouse_pos );
+            for( size_t ind = 0; ind < buttons.size() && ind < options.size(); ++ind ) {
+                const auto &btn = buttons[ind];
+                const auto x1 = getbegx( win ) + border_width + btn.pos.x;
+                const auto x2 = x1 + utf8_width( btn.text, true ) - 1;
+                const auto y = getbegy( win ) + border_width + btn.pos.y;
+                if( cell.x < x1 || cell.x > x2 || cell.y != y ) {
+                    continue;
+                }
+                if( res.action == "MOUSE_MOVE" ) {
+                    if( cur != ind ) {
+                        cur = ind;
+                        ui_manager::redraw();
+                    }
+                } else if( options[ind].filter( res.evt ) ) {
+                    cur = ind;
+                    res.wait_input = false;
+                    res.action = options[ind].action;
+                }
+                break;
+            }
+        }
     } while(
         // Always ignore mouse movement
         ( res.evt.type == input_event_t::mouse && res.evt.get_first_input() == MOUSE_MOVE ) ||

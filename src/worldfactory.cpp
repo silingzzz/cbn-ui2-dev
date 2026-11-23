@@ -445,6 +445,8 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
 
     input_context ctxt( "PICK_WORLD_DIALOG" );
     ctxt.register_updown();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "NEXT_TAB" );
@@ -469,6 +471,18 @@ WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
             if( action == "SELECT" && hit_world_row ) {
                 action = "CONFIRM";
             }
+        }
+
+        if( action == "SCROLL_UP" ) {
+            if( sel == 0 ) {
+                continue;
+            }
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            if( sel + 1 >= world_pages[selpage].size() ) {
+                continue;
+            }
+            action = "DOWN";
         }
 
         if( action == "QUIT" ) {
@@ -768,6 +782,8 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
     // Mouse: hover selects the mod row, click closes the list like CONFIRM.
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
         draw_border( w_border, BORDER_COLOR, _( " ACTIVE WORLD MODS " ) );
@@ -794,6 +810,18 @@ void worldfactory::show_active_world_mods( const std::vector<mod_id> &world_mods
                     break;
                 }
             }
+        }
+
+        if( action == "SCROLL_UP" ) {
+            if( cursor <= 0 ) {
+                continue;
+            }
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            if( cursor + 1 >= static_cast<int>( num_mods ) ) {
+                continue;
+            }
+            action = "DOWN";
         }
 
         if( action == "UP" ) {

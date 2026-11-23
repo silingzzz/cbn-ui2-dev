@@ -646,6 +646,8 @@ void show_bionics_ui( Character &who )
 
     input_context ctxt( "BIONICS" );
     ctxt.register_updown();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "ANY_INPUT" );
     ctxt.register_action( "TOGGLE_EXAMINE" );
     ctxt.register_action( "REASSIGN" );
@@ -766,6 +768,18 @@ void show_bionics_ui( Character &who )
 #endif
 
         std::string action = ctxt.handle_input();
+        if( action == "SCROLL_UP" ) {
+            if( current_bionic_list->empty() || cursor == 0 ) {
+                continue;
+            }
+            action = "UP";
+        } else if( action == "SCROLL_DOWN" ) {
+            if( current_bionic_list->empty() ||
+                static_cast<size_t>( cursor ) + 1 >= current_bionic_list->size() ) {
+                continue;
+            }
+            action = "DOWN";
+        }
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
             bool hit_tab = false;

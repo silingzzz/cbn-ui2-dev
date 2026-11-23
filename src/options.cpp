@@ -3805,6 +3805,8 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "PREV_TAB" );
     ctxt.register_action( "CONFIRM" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     // Mouse: hover moves the option cursor, click confirms the hovered option.
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "SELECT" );
@@ -4077,6 +4079,12 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
             if( action == "SELECT" ) {
                 action = "CONFIRM";
             }
+        }
+
+        if( action == "SCROLL_UP" ) {
+            action = iCurrentLine > 0 ? "UP" : "";
+        } else if( action == "SCROLL_DOWN" ) {
+            action = iCurrentLine + 1 < static_cast<int>( page_items.size() ) ? "DOWN" : "";
         }
 
         if( world_options_only && ( action == "NEXT_TAB" || action == "PREV_TAB" ||

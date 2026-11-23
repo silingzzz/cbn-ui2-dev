@@ -239,6 +239,8 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
 
     input_context ctxt( "MUTATIONS" );
     ctxt.register_updown();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "ANY_INPUT" );
     ctxt.register_action( "TOGGLE_EXAMINE" );
     ctxt.register_action( "TOGGLE_SPRITE" );
@@ -389,8 +391,19 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
         recalc_max_scroll_position();
         ui_manager::redraw();
         bool handled = false;
-        const std::string action = ctxt.handle_input();
+        std::string action = ctxt.handle_input();
         const input_event evt = ctxt.get_raw_input();
+        if( action == "SCROLL_UP" || action == "SCROLL_DOWN" ) {
+            const auto list_size = tab_mode == mutation_tab_mode::passive ?
+                                   passive.size() :
+                                   tab_mode == mutation_tab_mode::active ? active.size() : 0;
+            const auto delta = action == "SCROLL_UP" ? -1 : 1;
+            const auto next = cursor + delta;
+            if( list_size == 0 || next < 0 || next >= static_cast<int>( list_size ) ) {
+                continue;
+            }
+            action = delta < 0 ? "UP" : "DOWN";
+        }
         if( action == "MOUSE_MOVE" || action == "SELECT" ) {
             const point cell = mouse_pixel_to_cell( evt.mouse_pos );
             bool row_hit = false;

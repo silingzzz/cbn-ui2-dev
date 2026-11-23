@@ -474,6 +474,8 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     input_context ctxt( "CONSTRUCTION" );
     ctxt.register_action( "UP", to_translation( "Move cursor up" ) );
     ctxt.register_action( "DOWN", to_translation( "Move cursor down" ) );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "RIGHT", to_translation( "Move tab right" ) );
     ctxt.register_action( "LEFT", to_translation( "Move tab left" ) );
     ctxt.register_action( "TAB", to_translation( "Move tab right" ) );
@@ -1389,6 +1391,11 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             if( action == "SELECT" ) {
                 action = "CONFIRM";
             }
+        }
+        if( action == "SCROLL_UP" ) {
+            action = select > 0 ? "UP" : "";
+        } else if( action == "SCROLL_DOWN" ) {
+            action = select + 1 < static_cast<int>( constructs.size() ) ? "DOWN" : "";
         }
         if( action == "FILTER" ) {
             struct filter_example {

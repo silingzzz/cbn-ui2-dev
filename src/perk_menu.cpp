@@ -188,6 +188,8 @@ void draw_perk_menu( Character &player )
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "UP" );
     ctxt.register_action( "DOWN" );
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "PAGE_UP", to_translation( "Scroll Description Up" ) );
     ctxt.register_action( "PAGE_DOWN", to_translation( "Scroll Description Down" ) );
     ctxt.register_action( "PREV_TAB" );
@@ -232,6 +234,16 @@ void draw_perk_menu( Character &player )
         } else if( action == "PAGE_DOWN" ) {
             info_position += 1;
             if( info_position > info_lines ) { info_position = 0; }
+        } else if( action == "SCROLL_UP" ) {
+            if( list_position > 0 ) {
+                info_position = 0;
+                list_position -= 1;
+            }
+        } else if( action == "SCROLL_DOWN" ) {
+            if( list_position + 1 < list_lines ) {
+                info_position = 0;
+                list_position += 1;
+            }
         } else if( action == "UP" ) {
             info_position = 0;
             list_position -= 1;

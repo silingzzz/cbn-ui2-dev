@@ -1320,6 +1320,11 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
         return false;
     }
 
+    if( action == "SCROLL_UP" ) {
+        action = line > line_beg ? "UP" : "";
+    } else if( action == "SCROLL_DOWN" ) {
+        action = line + 1 < line_end ? "DOWN" : "";
+    }
     if( action == "UP" ) {
         if( line > line_beg ) {
             --line;
@@ -1588,6 +1593,8 @@ void character_display::disp_info( Character &ch )
 
     input_context ctxt( "PLAYER_INFO" );
     ctxt.register_updown();
+    ctxt.register_action( "SCROLL_UP" );
+    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "NEXT_TAB", to_translation( "Cycle to next category" ) );
     ctxt.register_action( "PREV_TAB", to_translation( "Cycle to previous category" ) );
     ctxt.register_action( "QUIT" );
