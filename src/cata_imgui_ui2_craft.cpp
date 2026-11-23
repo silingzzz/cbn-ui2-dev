@@ -140,8 +140,8 @@ void draw()
         g_selected = rows.empty() ? nullptr : rows.front();
     }
 
-    ImGui::SetNextWindowPos( ImVec2( 60.0f, 520.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 470.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowPos( ImVec2( 60.0f, 390.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 585.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "制作（PR-4 预览）", &g_open ) ) {
         ImGui::End();
         return;
