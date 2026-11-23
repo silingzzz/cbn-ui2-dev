@@ -2,6 +2,7 @@
 
 #include "cata_imgui.h"
 #include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_zone.h"
 #include "advanced_inv.h"
 #include "animation.h"
@@ -1937,6 +1938,11 @@ bool game::handle_action()
 #if defined( TILES )
     if( ui2::zone::take_map_select_request() ) {
         ui2::zone::run_map_select_flow();
+        return false;
+    }
+    if( ui2::gear::take_deferred_action() ) {
+        // The item action may have opened its own game UI; do not continue with
+        // the synthetic input event that woke this loop.
         return false;
     }
 #endif

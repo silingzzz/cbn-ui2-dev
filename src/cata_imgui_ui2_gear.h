@@ -13,6 +13,14 @@ void draw();
 void toggle();
 bool is_open();
 
+/// True when a click queued an item-use request that the game loop still owes.
+bool has_deferred_action();
+
+/// Run the queued item-use request from `game::handle_action`, after the
+/// ImGui frame has been presented and input returned to the game loop.
+/// Returns true when a request was consumed (even if it proved stale).
+bool take_deferred_action();
+
 } // namespace gear
 } // namespace ui2
 

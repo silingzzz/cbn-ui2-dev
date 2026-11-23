@@ -10,6 +10,8 @@
 #include <imgui.h>
 
 #include "avatar.h"
+#include "avatar_action.h"
+#include "cata_imgui.h"
 #include "character.h"
 #include "inventory.h"
 #include "item.h"
@@ -23,6 +25,9 @@ bool g_open = false;
 item *g_selected = nullptr;
 item *g_selected_parent = nullptr;
 
+/// One item-use request, consumed later by game::handle_action.
+item *g_deferred_use = nullptr;
+
 enum class pending_kind {
     none,
     wield,
@@ -31,6 +36,7 @@ enum class pending_kind {
     wear,
     move_child,
     take_child,
+    use,
 };
 
 struct pending_action {
@@ -342,6 +348,12 @@ void apply_pending()
                 g_selected_parent = nullptr;
             }
             break;
+        case pending_kind::use:
+            // Never call use_item from inside ImGui's draw callback: it can
+            // open another game UI and abort the current frame. Queue it for
+            // game::handle_action, which runs outside ImGui and owns UI input.
+            g_deferred_use = &it;
+            break;
         default:
             break;
     }
@@ -363,6 +375,38 @@ bool is_open()
 void toggle()
 {
     g_open = !g_open;
+}
+
+bool has_deferred_action()
+{
+    return g_deferred_use != nullptr;
+}
+
+bool take_deferred_action()
+{
+    if( g_deferred_use == nullptr ) {
+        return false;
+    }
+    item *requested = g_deferred_use;
+    g_deferred_use = nullptr;
+
+    bool still_owned = false;
+    for( const gear_row &row : build_rows() ) {
+        if( row.ptr != nullptr && contains_item( *row.ptr, requested ) ) {
+            still_owned = true;
+            break;
+        }
+    }
+    if( !still_owned ) {
+        get_avatar().add_msg_if_player( m_info, "该物品已不在装备栏，取消使用。" );
+        return true;
+    }
+
+    // The item may be consumed or moved by the action; selection would dangle.
+    g_selected = nullptr;
+    g_selected_parent = nullptr;
+    avatar_action::use_item( get_avatar(), requested );
+    return true;
 }
 
 void draw()
@@ -501,6 +545,19 @@ void draw()
                         if( ImGui::Button( "穿上", ImVec2( 90.0f, 0.0f ) ) ) {
                             g_pending = { pending_kind::wear, &it, nullptr, nullptr };
                         }
+                    }
+                    ImGui::Spacing();
+                    if( ImGui::Button( "使用", ImVec2( 90.0f, 0.0f ) ) ) {
+                        g_pending = { pending_kind::use, &it, nullptr, nullptr };
+                        // The game action opens its own UI; hide the overlay so the
+                        // player sees that UI rather than this paused frame.
+                        g_open = false;
+                        if( cata_imgui::is_open() ) {
+                            cata_imgui::toggle();
+                        }
+                    }
+                    if( ImGui::IsItemHovered() ) {
+                        ImGui::SetTooltip( "关闭覆盖层后调用游戏原有的使用动作；会打开物品对应界面。" );
                     }
                     if( slot == "背包" ) {
                         draw_move_combo();
