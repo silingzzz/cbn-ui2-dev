@@ -3,6 +3,7 @@
 #include "cata_imgui_ui2_menu.h"
 #include "cata_imgui_ui2_focus.h"
 #include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_gear.h"
 
 #if defined( TILES )
 
@@ -204,6 +205,8 @@ void draw()
     focus::draw();
     // PR-2A AIM-1: read-only real backpack window.
     ui2::aim::draw();
+    // PR-3A: read-only worn/wielded equipment and nested containers.
+    ui2::gear::draw();
 }
 
 } // namespace ui2

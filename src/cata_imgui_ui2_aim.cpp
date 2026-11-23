@@ -12,6 +12,7 @@
 #include "aim_action.h"
 #include "aim_snapshot.h"
 #include "avatar.h"
+#include "cata_imgui_ui2_gear.h"
 #include "inventory.h"
 #include "item.h"
 #include "messages.h"
@@ -279,6 +280,11 @@ void draw()
             }
         }
         ImGui::EndCombo();
+    }
+
+    ImGui::SameLine();
+    if( ImGui::Button( "装备/容器", ImVec2( 90.0f, 0.0f ) ) ) {
+        ui2::gear::toggle();
     }
 
     ImGui::SameLine();
