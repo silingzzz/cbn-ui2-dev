@@ -3496,14 +3496,15 @@ static void CheckMessages()
                     if( !SDL_CursorVisible() ) {
                         SDL_ShowCursor();
                     }
+                }
 
-                    // Only feed the game's mouseover/highlight pipeline when the
-                    // ImGui overlay is not consuming the mouse; otherwise both
-                    // react to the same movement.
-                    if( !cata_imgui::want_capture_mouse() ) {
-                        last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
-                        cata_imgui::trace_game_mouse( 0 );
-                    }
+                // Feed the game's mouseover/highlight pipeline whenever the
+                // ImGui overlay is not consuming the mouse.  This must not
+                // depend on HIDE_CURSOR: the UI 2.0 hover card needs the
+                // resolved tile even when the cursor is normally hidden.
+                if( !cata_imgui::want_capture_mouse() ) {
+                    last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
+                    cata_imgui::trace_game_mouse( 0 );
                 }
                 break;
 

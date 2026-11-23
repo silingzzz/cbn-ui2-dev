@@ -23,6 +23,7 @@
 #include "calendar.h"
 #include "cata_cartesian_product.h"
 #include "cata_utility.h"
+#include "cata_imgui_ui2_map.h"
 #include "catacharset.h"
 #include "catalua_bindings_coords_common.h"
 #include "catalua_hooks.h"
@@ -3533,6 +3534,13 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
         if( action == "MOUSE_MOVE" ) {
             ZoneScopedN( "handle_mouseview_mouse_move" );
             const std::optional<tripoint_bub_ms> mouse_pos = ctxt.get_coordinates( w_terrain );
+#if defined( TILES )
+            if( mouse_pos ) {
+                ui2::mapview::set_hover( *mouse_pos );
+            } else {
+                ui2::mapview::clear_hover();
+            }
+#endif
             if( mouse_pos && ( !liveview_pos || *mouse_pos != *liveview_pos ) ) {
                 liveview_pos = mouse_pos;
                 liveview.show( *liveview_pos );

@@ -14,6 +14,8 @@
 
 #include <imgui.h>
 
+#include "cata_imgui_ui2_map.h"
+
 namespace
 {
 
@@ -230,6 +232,8 @@ void draw()
     ui2::craft::draw();
     // PR-5A: read-only zone inspector with a deferred enable toggle.
     ui2::zone::draw();
+    // PR-6A: hover card for the tile under the game cursor.
+    ui2::mapview::draw();
 }
 
 } // namespace ui2
