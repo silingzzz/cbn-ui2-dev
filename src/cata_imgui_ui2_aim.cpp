@@ -36,6 +36,8 @@ int g_dest_index = 0;
 int g_move_amount = 1;
 bool g_move_pending = false;
 std::string g_status = "每帧重建快照 · 可移动物品";
+std::vector<std::string> g_checked_keys;
+std::string g_last_filter;
 
 auto to_kg( units::mass m ) -> double
 {
@@ -107,6 +109,41 @@ auto find_row_index( const aim_snapshot &snap, const std::string &key ) -> int
     return -1;
 }
 
+auto is_checked( const std::string &key ) -> bool
+{
+    return std::find( g_checked_keys.begin(), g_checked_keys.end(), key ) != g_checked_keys.end();
+}
+
+void toggle_checked( const std::string &key )
+{
+    const auto it = std::find( g_checked_keys.begin(), g_checked_keys.end(), key );
+    if( it == g_checked_keys.end() ) {
+        g_checked_keys.push_back( key );
+    } else {
+        g_checked_keys.erase( it );
+    }
+}
+
+auto build_checked_requests( const aim_snapshot &snap, int amount ) ->
+std::vector<aim_move_request>
+{
+    std::vector<aim_move_request> requests;
+    requests.reserve( g_checked_keys.size() );
+    for( const std::string &key : g_checked_keys ) {
+        const int idx = find_row_index( snap, key );
+        if( idx < 0 ) {
+            continue;
+        }
+        const aim_row &row = snap.rows[static_cast<std::size_t>( idx )];
+        aim_move_request request;
+        request.stack_index = row.stack_index;
+        request.type = row.type_id;
+        request.amount = std::max( 1, std::min( amount, row.count ) );
+        requests.push_back( request );
+    }
+    return requests;
+}
+
 auto submit_move( const aim_row &row, int amount, const aim_move_target &target ) -> aim_move_result
 {
     const aim_move_result result = aim_move_items(
@@ -123,6 +160,29 @@ auto submit_move( const aim_row &row, int amount, const aim_move_target &target 
         g_selected = -1;
         g_selected_key.clear();
         g_status = "背包已变化：选择已清除，请重新选择";
+    }
+    return result;
+}
+
+auto submit_batch( const std::vector<aim_move_request> &requests, int total,
+                   const aim_move_target &target ) -> aim_move_result
+{
+    const aim_move_result result = aim_move_items( get_avatar(), requests, target.offset );
+    if( result == aim_move_result::started ) {
+        g_move_pending = true;
+        char msg[512];
+        std::snprintf( msg, sizeof( msg ),
+                       "已提交：%d 行 / 共 %d 件 → %s。按 F10 关闭覆盖层，游戏才会推进并执行。",
+                       static_cast<int>( requests.size() ), total, target.label );
+        g_status = msg;
+        g_checked_keys.clear();
+        add_msg( m_info, "已提交批量移动：%d 行 / %d 件 → %s",
+                 static_cast<int>( requests.size() ), total, target.label );
+    } else {
+        g_selected = -1;
+        g_selected_key.clear();
+        g_checked_keys.clear();
+        g_status = "背包已变化：批量选择已清除，请重新选择";
     }
     return result;
 }
@@ -176,8 +236,27 @@ void draw()
         }
     }
 
+    // Batch identity is also (category, type, stack slot). Drop keys whose stack
+    // disappeared, and clear the batch when the filter changes so hidden rows
+    // cannot be moved by accident.
+    for( auto it = g_checked_keys.begin(); it != g_checked_keys.end(); ) {
+        if( find_row_index( snap, *it ) < 0 ) {
+            it = g_checked_keys.erase( it );
+        } else {
+            ++it;
+        }
+    }
+    const std::string filter_now = g_category + "|" + g_search;
+    if( filter_now != g_last_filter ) {
+        g_checked_keys.clear();
+        g_last_filter = filter_now;
+    }
+
+    const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
+    const auto &targets = aim_move_targets();
+
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 60.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 820.0f, 560.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowSize( ImVec2( 900.0f, 560.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "新版 AIM（开发预览）· 背包移动", &g_open ) ) {
         ImGui::End();
         return;
@@ -207,10 +286,26 @@ void draw()
                          static_cast<int>( snap.rows.size() ), to_kg( snap.total_weight ),
                          to_l( snap.total_volume ), static_cast<unsigned long long>( snap.build_id ) );
 
-    ImGui::Separator();
+    ImGui::TextDisabled( "批量：勾选 %d 行", static_cast<int>( g_checked_keys.size() ) );
+    ImGui::SameLine();
+    if( ImGui::SmallButton( "全选当前筛选" ) ) {
+        for( const std::size_t idx : visible ) {
+            const std::string key = row_key( snap.rows[idx] );
+            if( !is_checked( key ) ) {
+                g_checked_keys.push_back( key );
+            }
+        }
+        g_status = "已全选当前筛选";
+    }
+    ImGui::SameLine();
+    if( ImGui::SmallButton( "清空勾选" ) ) {
+        g_checked_keys.clear();
+        g_status = "已清空批量勾选";
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled( "Ctrl+A 全选 ｜ Ctrl+Enter 移动" );
 
-    const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
-    const auto &targets = aim_move_targets();
+    ImGui::Separator();
 
     auto select_row = [&snap]( std::size_t idx ) {
         g_selected = static_cast<int>( idx );
@@ -219,7 +314,47 @@ void draw()
         g_status = "已选中";
     };
 
-    const float list_width = 460.0f;
+    auto select_all_visible = [&snap, &visible]() {
+        for( const std::size_t idx : visible ) {
+            const std::string key = row_key( snap.rows[idx] );
+            if( !is_checked( key ) ) {
+                g_checked_keys.push_back( key );
+            }
+        }
+    };
+
+    auto commit_current = [&snap, &targets]() -> aim_move_result {
+        if( !g_checked_keys.empty() ) {
+            const std::vector<aim_move_request> requests =
+                build_checked_requests( snap, g_move_amount );
+            int total = 0;
+            for( const aim_move_request &request : requests ) {
+                total += request.amount;
+            }
+            if( !requests.empty() ) {
+                return submit_batch( requests, total, targets[g_dest_index] );
+            }
+        }
+        if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
+            const aim_row &row = snap.rows[static_cast<std::size_t>( g_selected )];
+            return submit_move( row, std::max( 1, std::min( g_move_amount, row.count ) ),
+                                targets[g_dest_index] );
+        }
+        return aim_move_result::stale_selection;
+    };
+
+    if( !ImGui::GetIO().WantTextInput &&
+        ImGui::IsWindowFocused( ImGuiFocusedFlags_RootAndChildWindows ) ) {
+        if( ImGui::IsKeyChordPressed( ImGuiMod_Ctrl | ImGuiKey_A ) ) {
+            select_all_visible();
+            g_status = "已全选当前筛选";
+        }
+        if( ImGui::IsKeyChordPressed( ImGuiMod_Ctrl | ImGuiKey_Enter ) && !g_move_pending ) {
+            commit_current();
+        }
+    }
+
+    const float list_width = 520.0f;
     if( ImGui::BeginChild( "aim_list", ImVec2( list_width, 0.0f ), true ) ) {
         if( visible.empty() ) {
             ImGui::Dummy( ImVec2( 0.0f, 40.0f ) );
@@ -233,6 +368,18 @@ void draw()
                     ImGui::Spacing();
                     ImGui::TextDisabled( "▸ %s", last_category.c_str() );
                 }
+                const std::string key = row_key( row );
+                bool checked = is_checked( key );
+                char chk_id[64];
+                std::snprintf( chk_id, sizeof( chk_id ), "##aim_chk%zu", idx );
+                if( ImGui::Checkbox( chk_id, &checked ) ) {
+                    toggle_checked( key );
+                    if( checked ) {
+                        select_row( idx );
+                    }
+                }
+                ImGui::SameLine( 0.0f, 6.0f );
+
                 char label[256];
                 std::snprintf( label, sizeof( label ), "%s##%zu", row.name.c_str(), idx );
                 if( ImGui::Selectable( label, g_selected == static_cast<int>( idx ) ) ) {
@@ -242,10 +389,8 @@ void draw()
                 if( row_right_clicked ) {
                     select_row( idx );
                 }
-
-                std::string drag_key = row_key( row );
                 if( ImGui::BeginDragDropSource() ) {
-                    ImGui::SetDragDropPayload( "AIM_ROW", drag_key.c_str(), drag_key.size() + 1 );
+                    ImGui::SetDragDropPayload( "AIM_ROW", key.c_str(), key.size() + 1 );
                     ImGui::Text( "移动：%s（%d 件）", row.name.c_str(), g_move_amount );
                     ImGui::EndDragDropSource();
                 }
@@ -269,9 +414,9 @@ void draw()
                     ImGui::EndPopup();
                 }
 
-                ImGui::SameLine( 270.0f );
-                ImGui::TextDisabled( "%s ｜ x%d ｜ %.2f kg ｜ %.2f L", row.category_name.c_str(),
-                                     row.count, to_kg( row.weight ), to_l( row.volume ) );
+                ImGui::SameLine( 310.0f );
+                ImGui::TextDisabled( "x%d ｜ %.2f kg ｜ %.2f L", row.count, to_kg( row.weight ),
+                                     to_l( row.volume ) );
             }
         }
     }
@@ -280,7 +425,7 @@ void draw()
     ImGui::SameLine();
     if( ImGui::BeginChild( "aim_right_panel", ImVec2( 0.0f, 0.0f ), true ) ) {
         const float inner_height = ImGui::GetContentRegionAvail().y;
-        if( ImGui::BeginChild( "aim_detail_scroll", ImVec2( 0.0f, std::max( 120.0f, inner_height - 268.0f ) ),
+        if( ImGui::BeginChild( "aim_detail_scroll", ImVec2( 0.0f, std::max( 120.0f, inner_height - 292.0f ) ),
                                false ) ) {
             if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
                 draw_detail( snap.rows[static_cast<std::size_t>( g_selected )] );
@@ -294,9 +439,31 @@ void draw()
 
         ImGui::Separator();
         ImGui::TextDisabled( "移动 1–N 件到地图" );
-        if( g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() ) ) {
-            const aim_row &row = snap.rows[static_cast<std::size_t>( g_selected )];
-            ImGui::Text( "物品：%s（最多 %d 件）", row.name.c_str(), row.count );
+        const bool has_active = g_selected >= 0 && g_selected < static_cast<int>( snap.rows.size() );
+        const aim_row *active_row = has_active ?
+                                    &snap.rows[static_cast<std::size_t>( g_selected )] : nullptr;
+
+        int batch_max = 0;
+        for( const std::string &key : g_checked_keys ) {
+            const int idx = find_row_index( snap, key );
+            if( idx >= 0 ) {
+                batch_max = std::max( batch_max,
+                                      snap.rows[static_cast<std::size_t>( idx )].count );
+            }
+        }
+        const bool has_batch = !g_checked_keys.empty() && batch_max > 0;
+        const int amount_max = has_batch ? batch_max : ( active_row ? active_row->count : 0 );
+
+        if( !has_active && !has_batch ) {
+            ImGui::TextDisabled( "先选中左侧物品，或勾选若干行。" );
+        } else {
+            if( active_row != nullptr ) {
+                ImGui::Text( "当前物品：%s（最多 %d 件）", active_row->name.c_str(), active_row->count );
+            }
+            if( has_batch ) {
+                ImGui::Text( "批量勾选：%d 行（按行各自上限，最多到 %d）",
+                             static_cast<int>( g_checked_keys.size() ), batch_max );
+            }
 
             // 3x3 ground grid around the player. Clicking a cell only selects the
             // destination; the explicit button below still owns the commit.
@@ -347,23 +514,40 @@ void draw()
             ImGui::SetNextItemWidth( 110.0f );
             ImGui::InputInt( "##move_amount", &g_move_amount, 1, 10 );
             ImGui::SameLine();
-            ImGui::TextDisabled( "数量（1–%d）", row.count );
-            g_move_amount = std::max( 1, std::min( g_move_amount, row.count ) );
+            ImGui::TextDisabled( has_batch ? "每行数量（按各自上限截断）" : "数量（1–%d）", batch_max );
+            g_move_amount = std::max( 1, std::min( g_move_amount, amount_max ) );
 
-            ImGui::BeginDisabled( g_move_pending );
-            char move_label[96];
-            std::snprintf( move_label, sizeof( move_label ), "移动 %d 件 → %s", g_move_amount,
-                           targets[g_dest_index].label );
-            if( ImGui::Button( g_move_pending ? "已提交，等待执行" : move_label, ImVec2( -1.0f, 0.0f ) ) ) {
-                submit_move( row, g_move_amount, targets[g_dest_index] );
+            if( has_batch ) {
+                const std::vector<aim_move_request> requests =
+                    build_checked_requests( snap, g_move_amount );
+                int total = 0;
+                for( const aim_move_request &request : requests ) {
+                    total += request.amount;
+                }
+                ImGui::BeginDisabled( g_move_pending || requests.empty() );
+                char batch_label[128];
+                std::snprintf( batch_label, sizeof( batch_label ),
+                               "移动勾选 %d 行（合计 %d 件）→ %s",
+                               static_cast<int>( requests.size() ), total, targets[g_dest_index].label );
+                if( ImGui::Button( g_move_pending ? "已提交，等待执行" : batch_label,
+                                   ImVec2( -1.0f, 0.0f ) ) ) {
+                    submit_batch( requests, total, targets[g_dest_index] );
+                }
+                ImGui::EndDisabled();
+            } else if( active_row != nullptr ) {
+                ImGui::BeginDisabled( g_move_pending );
+                char move_label[96];
+                std::snprintf( move_label, sizeof( move_label ), "移动 %d 件 → %s", g_move_amount,
+                               targets[g_dest_index].label );
+                if( ImGui::Button( g_move_pending ? "已提交，等待执行" : move_label, ImVec2( -1.0f, 0.0f ) ) ) {
+                    submit_move( *active_row, g_move_amount, targets[g_dest_index] );
+                }
+                ImGui::EndDisabled();
             }
-            ImGui::EndDisabled();
             ImGui::TextDisabled( "容量、重量、归属与落点由 ACT_MOVE_ITEMS 判定。" );
             if( g_move_pending ) {
                 ImGui::TextDisabled( "已提交：按 F10 关闭覆盖层推进时间。" );
             }
-        } else {
-            ImGui::TextDisabled( "先选中左侧物品。" );
         }
     }
     ImGui::EndChild();

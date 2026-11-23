@@ -1,5 +1,6 @@
 #include "aim_action.h"
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -32,46 +33,59 @@ auto aim_move_targets() -> const std::array<aim_move_target, 9> &
     return g_targets;
 }
 
-auto aim_move_items( Character &who, int stack_index, const itype_id &type,
-                     int amount, tripoint_rel_ms dest ) -> aim_move_result
+auto aim_move_items( Character &who, const std::vector<aim_move_request> &requests,
+                     tripoint_rel_ms dest ) -> aim_move_result
 {
-    if( amount <= 0 ) {
+    if( requests.empty() ) {
         return aim_move_result::stale_selection;
     }
 
     location_inventory &inv = who.get_inv();
-    if( stack_index < 0 || stack_index >= static_cast<int>( inv.size() ) ) {
-        return aim_move_result::stale_selection;
-    }
+    std::vector<int> used_stacks;
+    used_stacks.reserve( requests.size() );
 
-    const std::vector<item *> &stack = inv.const_stack( stack_index );
-    if( stack.empty() || stack.front() == nullptr || stack.front()->typeId() != type ) {
-        return aim_move_result::stale_selection;
-    }
+    for( const aim_move_request &request : requests ) {
+        if( request.amount <= 0 || request.stack_index < 0 ||
+            request.stack_index >= static_cast<int>( inv.size() ) ) {
+            return aim_move_result::stale_selection;
+        }
+        if( std::find( used_stacks.begin(), used_stacks.end(), request.stack_index ) !=
+            used_stacks.end() ) {
+            return aim_move_result::stale_selection;
+        }
 
-    const item &first = *stack.front();
-    const int available = first.count_by_charges() ? first.charges :
-                          static_cast<int>( stack.size() );
-    if( available < amount ) {
-        return aim_move_result::stale_selection;
+        const std::vector<item *> &stack = inv.const_stack( request.stack_index );
+        if( stack.empty() || stack.front() == nullptr || stack.front()->typeId() != request.type ) {
+            return aim_move_result::stale_selection;
+        }
+
+        const item &first = *stack.front();
+        const int available = first.count_by_charges() ? first.charges :
+                              static_cast<int>( stack.size() );
+        if( available < request.amount ) {
+            return aim_move_result::stale_selection;
+        }
+        used_stacks.push_back( request.stack_index );
     }
 
     std::vector<item *> targets;
     std::vector<int> quantities;
-    if( first.count_by_charges() ) {
-        // One request carrying the charge count; the actor splits it when it runs.
-        targets.push_back( stack.front() );
-        quantities.push_back( amount );
-    } else {
-        // One instance per request; the actor's zero quantity means "the whole item".
-        targets.reserve( static_cast<std::size_t>( amount ) );
-        quantities.reserve( static_cast<std::size_t>( amount ) );
-        for( int i = 0; i < amount; ++i ) {
-            if( stack[static_cast<std::size_t>( i )] == nullptr ) {
-                return aim_move_result::stale_selection;
+    for( const aim_move_request &request : requests ) {
+        const std::vector<item *> &stack = inv.const_stack( request.stack_index );
+        const item &first = *stack.front();
+        if( first.count_by_charges() ) {
+            // One request carrying the charge count; the actor splits it when it runs.
+            targets.push_back( stack.front() );
+            quantities.push_back( request.amount );
+        } else {
+            // One instance per request; the actor's zero quantity means "the whole item".
+            for( int i = 0; i < request.amount; ++i ) {
+                if( stack[static_cast<std::size_t>( i )] == nullptr ) {
+                    return aim_move_result::stale_selection;
+                }
+                targets.push_back( stack[static_cast<std::size_t>( i )] );
+                quantities.push_back( 0 );
             }
-            targets.push_back( stack[static_cast<std::size_t>( i )] );
-            quantities.push_back( 0 );
         }
     }
 
@@ -79,6 +93,16 @@ auto aim_move_items( Character &who, int stack_index, const itype_id &type,
                              std::make_unique<move_items_activity_actor>(
                                  targets, quantities, false, dest ) ) );
     return aim_move_result::started;
+}
+
+auto aim_move_items( Character &who, int stack_index, const itype_id &type,
+                     int amount, tripoint_rel_ms dest ) -> aim_move_result
+{
+    aim_move_request request;
+    request.stack_index = stack_index;
+    request.type = type;
+    request.amount = amount;
+    return aim_move_items( who, std::vector<aim_move_request>{ request }, dest );
 }
 
 auto aim_move_one( Character &who, int stack_index, const itype_id &type,

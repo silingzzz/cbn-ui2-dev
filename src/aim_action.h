@@ -3,6 +3,7 @@
 #define CATA_SRC_AIM_ACTION_H
 
 #include <array>
+#include <vector>
 
 #include "coordinates.h"
 #include "type_id.h"
@@ -25,16 +26,26 @@ struct aim_move_target {
     const char *label;
 };
 
+struct aim_move_request {
+    int stack_index = -1;
+    itype_id type;
+    int amount = 0;
+};
+
 /// The nine map tiles under and around the player, in screen order.
 auto aim_move_targets() -> const std::array<aim_move_target, 9> &;
 
-/// Move `amount` items (or `amount` charges of a charge-counted stack) out of
-/// the player's backpack to `dest`, relative to the player. `amount` is only a
-/// request: it may not exceed the stack, and the activity still runs the move
-/// one item/charge at a time.
+/// Move a batch of stacks out of the player's backpack to `dest`, relative to
+/// the player. Each request is validated against the current inventory before
+/// any pointer is put into the activity, so a stale batch is rejected as a
+/// whole instead of half-starting.
 ///
 /// Returns `started` after the activity has been assigned. The items are still
 /// in the backpack until the game processes the activity.
+auto aim_move_items( Character &who, const std::vector<aim_move_request> &requests,
+                     tripoint_rel_ms dest ) -> aim_move_result;
+
+/// Single-stack wrapper used by drag/drop and the row context menu.
 auto aim_move_items( Character &who, int stack_index, const itype_id &type,
                      int amount, tripoint_rel_ms dest ) -> aim_move_result;
 
