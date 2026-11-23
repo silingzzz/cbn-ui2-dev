@@ -14,6 +14,7 @@
 #include "avatar.h"
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
+#include "cata_imgui_ui2_zone.h"
 #include "inventory.h"
 #include "item.h"
 #include "messages.h"
@@ -290,6 +291,10 @@ void draw()
     ImGui::SameLine();
     if( ImGui::Button( "制作", ImVec2( 60.0f, 0.0f ) ) ) {
         ui2::craft::toggle();
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "区域", ImVec2( 60.0f, 0.0f ) ) ) {
+        ui2::zone::toggle();
     }
 
     ImGui::SameLine();

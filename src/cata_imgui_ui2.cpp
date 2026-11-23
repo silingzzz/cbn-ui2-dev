@@ -5,6 +5,7 @@
 #include "cata_imgui_ui2_aim.h"
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
+#include "cata_imgui_ui2_zone.h"
 
 #if defined( TILES )
 
@@ -227,6 +228,8 @@ void draw()
     ui2::gear::draw();
     // PR-4A: recipe browser with a direct path into the existing craft flow.
     ui2::craft::draw();
+    // PR-5A: read-only zone inspector with a deferred enable toggle.
+    ui2::zone::draw();
 }
 
 } // namespace ui2
