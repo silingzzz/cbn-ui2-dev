@@ -2,6 +2,7 @@
 
 #include "cata_imgui.h"
 #include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_zone.h"
 #include "advanced_inv.h"
 #include "animation.h"
 #include "armor_layers.h"
@@ -1933,6 +1934,12 @@ void game::open_consume_item_menu()
 bool game::handle_action()
 {
     ZoneScopedN( "handle_action" );
+#if defined( TILES )
+    if( ui2::zone::take_map_select_request() ) {
+        ui2::zone::run_map_select_flow();
+        return false;
+    }
+#endif
     std::string action;
     input_context ctxt;
     action_id act = ACTION_NULL;

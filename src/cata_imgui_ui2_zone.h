@@ -12,6 +12,10 @@ bool is_open();
 void toggle();
 void draw();
 
+// PR-5C: map rectangle selection and zone creation.
+auto take_map_select_request() -> bool;
+void run_map_select_flow();
+
 } // namespace zone
 } // namespace ui2
 

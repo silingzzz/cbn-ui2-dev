@@ -305,6 +305,10 @@ class zone_data
 
         // returns true if name is changed
         bool set_name();
+        // set name directly (used by the ImGui zone editor)
+        void set_name( const std::string &name_arg ) {
+            name = name_arg;
+        }
         // returns true if type is changed
         bool set_type();
         void set_position( const std::pair<tripoint_abs_ms, tripoint_abs_ms> &position,
