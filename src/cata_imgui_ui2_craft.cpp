@@ -29,6 +29,9 @@ bool g_only_craftable = false;
 const recipe *g_selected = nullptr;
 int g_batch = 1;
 char g_search[128] = "";
+// Total steps of the craft started from this window; used for the progress bar.
+int g_activity_total_moves = 0;
+bool g_pending_cancel = false;
 
 auto plain_text( const std::string &raw ) -> std::string
 {
@@ -94,6 +97,7 @@ auto build_rows() -> std::vector<const recipe *>
 void start_craft( const recipe &rec, int batch )
 {
     Character &you = get_avatar();
+    g_activity_total_moves = rec.batch_time( batch, 1.0f, 0 );
     you.make_craft( rec.ident(), batch, you.bub_pos() );
     add_msg( m_info, "新版制作：提交 %s ×%d，组件与工具仍由原制作流程检查。",
              plain_text( rec.result_name() ).c_str(), batch );
@@ -201,7 +205,28 @@ void draw()
                 ImGui::TreePop();
             }
             if( you.activity ) {
-                ImGui::TextDisabled( "当前活动：%s", you.activity->id().str().c_str() );
+                const std::string act_id = you.activity->id().str();
+                ImGui::TextDisabled( "当前活动：%s", act_id.c_str() );
+                if( act_id == "ACT_CRAFT" ) {
+                    const int moves_left = std::max( 0, you.activity->get_moves_left() );
+                    if( g_activity_total_moves > 0 ) {
+                        const float pct = std::clamp(
+                                              1.0f - static_cast<float>( moves_left ) /
+                                              static_cast<float>( g_activity_total_moves ),
+                                              0.0f, 1.0f );
+                        const char *overlay = pct >= 1.0f ? "即将完成" : nullptr;
+                        ImGui::ProgressBar( pct, ImVec2( -1.0f, 0.0f ), overlay );
+                        ImGui::TextDisabled( "剩余 %d 步（总 %d 步）", moves_left,
+                                             g_activity_total_moves );
+                    } else {
+                        ImGui::TextDisabled( "剩余 %d 步", moves_left );
+                    }
+                    if( ImGui::Button( "取消当前制作" ) ) {
+                        g_pending_cancel = true;
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled( "取消会丢弃已预扣的组件，原样走游戏 canceled 回调。" );
+                }
             } else {
                 ImGui::TextDisabled( "当前没有进行中的活动" );
             }
@@ -231,6 +256,18 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
+
+    // A write must not run inside the ImGui frame: cancelling can tear down the
+    // activity and invalidate the inventory the frame is still reading.
+    if( g_pending_cancel ) {
+        g_pending_cancel = false;
+        if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+            you.cancel_activity();
+            you.invalidate_crafting_inventory();
+            g_activity_total_moves = 0;
+            add_msg( m_info, "新版制作：已取消当前制作。" );
+        }
+    }
 }
 
 } // namespace craft
