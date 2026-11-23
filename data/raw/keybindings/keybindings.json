@@ -2870,14 +2870,14 @@
     "id": "UP",
     "category": "HELP_KEYBINDINGS",
     "name": "Pan up",
-    "bindings": [ { "input_method": "keyboard", "key": "UP" }, { "input_method": "keyboard", "key": "NUMPAD_8" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "UP" }, { "input_method": "keyboard", "key": "NUMPAD_8" }, { "input_method": "mouse", "key": "SCROLL_UP" } ]
   },
   {
     "type": "keybinding",
     "id": "DOWN",
     "category": "HELP_KEYBINDINGS",
     "name": "Pan down",
-    "bindings": [ { "input_method": "keyboard", "key": "DOWN" }, { "input_method": "keyboard", "key": "NUMPAD_2" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "DOWN" }, { "input_method": "keyboard", "key": "NUMPAD_2" }, { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
   },
   {
     "type": "keybinding",
@@ -2899,20 +2899,6 @@
     "category": "HELP_KEYBINDINGS",
     "name": "Add global keybinding",
     "bindings": [ { "input_method": "keyboard", "key": "=" } ]
-  },
-  {
-    "type": "keybinding",
-    "id": "SCROLL_UP",
-    "category": "HELP_KEYBINDINGS",
-    "name": "Scroll keybinding list up",
-    "bindings": [ { "input_method": "mouse", "key": "SCROLL_UP" } ]
-  },
-  {
-    "type": "keybinding",
-    "id": "SCROLL_DOWN",
-    "category": "HELP_KEYBINDINGS",
-    "name": "Scroll keybinding list down",
-    "bindings": [ { "input_method": "mouse", "key": "SCROLL_DOWN" } ]
   },
   {
     "type": "keybinding",

@@ -1103,8 +1103,6 @@ action_id input_context::display_menu( const bool permit_execute_action )
     ctxt.register_action( "DOWN", to_translation( "Scroll down" ) );
     ctxt.register_action( "PAGE_DOWN" );
     ctxt.register_action( "PAGE_UP" );
-    ctxt.register_action( "SCROLL_UP" );
-    ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "REMOVE" );
     ctxt.register_action( "ADD_LOCAL" );
     ctxt.register_action( "ADD_GLOBAL" );
@@ -1312,12 +1310,12 @@ action_id input_context::display_menu( const bool permit_execute_action )
             if( !filtered_registered_actions.empty() ) {
                 status = s_execute;
             }
-        } else if( action == "UP" || action == "SCROLL_UP" ) {
+        } else if( action == "UP" ) {
             if( !filtered_registered_actions.empty()
                 && scroll_offset > 0 ) {
                 scroll_offset--;
             }
-        } else if( action == "DOWN" || action == "SCROLL_DOWN" ) {
+        } else if( action == "DOWN" ) {
             if( !filtered_registered_actions.empty()
                 && filtered_registered_actions.size() > display_height
                 && scroll_offset < filtered_registered_actions.size() - display_height ) {
