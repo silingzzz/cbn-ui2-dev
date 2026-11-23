@@ -11,6 +11,7 @@
 
 #include "avatar.h"
 #include "character.h"
+#include "inventory.h"
 #include "item.h"
 #include "item_contents.h"
 #include "units.h"
@@ -41,6 +42,16 @@ struct pending_action {
 
 pending_action g_pending;
 
+struct gear_drag_payload {
+    item *subject = nullptr;
+    item *parent = nullptr;
+};
+
+struct container_choice {
+    item *ptr = nullptr;
+    std::string path;
+};
+
 struct gear_row {
     item *ptr = nullptr;
     const char *slot = "";
@@ -61,6 +72,13 @@ auto build_rows() -> std::vector<gear_row>
             rows.push_back( { worn, "穿戴" } );
         }
     }
+    const location_inventory &inv = you.get_inv();
+    for( int i = 0; i < static_cast<int>( inv.size() ); ++i ) {
+        const std::vector<item *> &stack = inv.const_stack( i );
+        if( !stack.empty() && stack.front() != nullptr ) {
+            rows.push_back( { stack.front(), "背包" } );
+        }
+    }
     return rows;
 }
 
@@ -77,6 +95,21 @@ auto row_of( const std::vector<gear_row> &rows, item *ptr ) -> int
 auto contents_of( item &it ) -> std::vector<item *>
 {
     return it.contents.all_items_top();
+}
+
+bool can_store_items( const item &it )
+{
+    return it.is_container() || it.get_storage() > 0_ml;
+}
+
+bool can_accept( const item &dest, const item &child )
+{
+    if( dest.is_container() ) {
+        return dest.can_contain( child );
+    }
+    // Wearable storage in this codebase is separate from type->container.
+    // Keep liquids in proper liquid containers rather than clothing storage.
+    return dest.get_storage() > 0_ml && !child.made_of( LIQUID );
 }
 
 auto plain_name( const item &it ) -> std::string
@@ -100,6 +133,60 @@ auto plain_name( const item &it ) -> std::string
     return out;
 }
 
+bool contains_item( const item &root, const item *needle )
+{
+    if( &root == needle ) {
+        return true;
+    }
+    for( const item *kid : root.contents.all_items_top() ) {
+        if( kid != nullptr && contains_item( *kid, needle ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void collect_containers( item &root, const std::string &path,
+                         std::vector<container_choice> &out )
+{
+    if( can_store_items( root ) ) {
+        out.push_back( { &root, path } );
+    }
+    for( item *kid : contents_of( root ) ) {
+        if( kid != nullptr ) {
+            collect_containers( *kid, path + " / " + plain_name( *kid ), out );
+        }
+    }
+}
+
+void draw_drag_source( item &it, item *parent )
+{
+    if( ImGui::BeginDragDropSource() ) {
+        const gear_drag_payload payload{ &it, parent };
+        ImGui::SetDragDropPayload( "GEAR_ITEM", &payload, sizeof( payload ) );
+        ImGui::Text( "移动：%s", plain_name( it ).c_str() );
+        ImGui::EndDragDropSource();
+    }
+}
+
+void accept_container_drop( item &dest )
+{
+    if( !can_store_items( dest ) ) {
+        return;
+    }
+    if( ImGui::BeginDragDropTarget() ) {
+        if( const ImGuiPayload *payload = ImGui::AcceptDragDropPayload( "GEAR_ITEM" ) ) {
+            if( payload->DataSize == sizeof( gear_drag_payload ) ) {
+                const auto dropped = *static_cast<const gear_drag_payload *>( payload->Data );
+                if( dropped.subject != nullptr ) {
+                    g_pending = { pending_kind::move_child, dropped.subject, dropped.parent, &dest };
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+}
+
 void draw_item_tree( item &it, item *parent )
 {
     const std::vector<item *> kids = contents_of( it );
@@ -111,6 +198,8 @@ void draw_item_tree( item &it, item *parent )
         g_selected = &it;
         g_selected_parent = parent;
     }
+    draw_drag_source( it, parent );
+    accept_container_drop( it );
     if( open ) {
         for( item *kid : kids ) {
             if( kid != nullptr ) {
@@ -137,13 +226,18 @@ void take_off_to_inventory( Character &you, item &it )
     }
 }
 
-void move_child( Character &you, item &parent, item &child, item &dest )
+void move_child( Character &you, item &child, item &dest )
 {
-    if( !dest.is_container() ) {
+    if( !can_store_items( dest ) ) {
         you.add_msg_if_player( m_info, "%s 不是容器。", plain_name( dest ) );
         return;
     }
-    if( &dest == &parent ) {
+    if( child.parent_item() == &dest || contains_item( child, &dest ) ) {
+        you.add_msg_if_player( m_info, "不能把物品移入自身或它自己的子容器。" );
+        return;
+    }
+    if( !can_accept( dest, child ) ) {
+        you.add_msg_if_player( m_info, "%s 不能收纳 %s。", plain_name( dest ), plain_name( child ) );
         return;
     }
     if( dest.contents.item_size_modifier() + child.volume() > dest.get_total_capacity() ) {
@@ -152,7 +246,7 @@ void move_child( Character &you, item &parent, item &child, item &dest )
     }
     const std::string child_name = plain_name( child );
     const std::string dest_name = plain_name( dest );
-    detached_ptr<item> piece = parent.contents.remove_top( &child );
+    detached_ptr<item> piece = child.detach();
     if( !piece ) {
         return;
     }
@@ -164,10 +258,14 @@ void move_child( Character &you, item &parent, item &child, item &dest )
     you.add_msg_if_player( m_info, "已把 %s 移入 %s。", child_name, dest_name );
 }
 
-void take_child_to_inventory( Character &you, item &parent, item &child )
+void take_child_to_inventory( Character &you, item & /*parent*/, item &child )
 {
+    if( child.made_of( LIQUID ) ) {
+        you.add_msg_if_player( m_info, "液体需要先倒入合适的容器，不能直接放入背包。" );
+        return;
+    }
     const std::string child_name = plain_name( child );
-    detached_ptr<item> piece = parent.contents.remove_top( &child );
+    detached_ptr<item> piece = child.detach();
     if( !piece ) {
         return;
     }
@@ -219,7 +317,7 @@ void apply_pending()
             if( !check.success() ) {
                 you.add_msg_if_player( m_info, "%s", check.c_str() );
             } else {
-                detached_ptr<item> piece = you.remove_primary_weapon();
+                detached_ptr<item> piece = it.detach();
                 detached_ptr<item> left = you.wear_item( std::move( piece ), true );
                 if( left ) {
                     you.i_add( std::move( left ) );
@@ -231,8 +329,8 @@ void apply_pending()
             break;
         }
         case pending_kind::move_child:
-            if( g_pending.from != nullptr && g_pending.dest != nullptr ) {
-                move_child( you, *g_pending.from, it, *g_pending.dest );
+            if( g_pending.dest != nullptr ) {
+                move_child( you, it, *g_pending.dest );
                 g_selected = g_pending.subject;
                 g_selected_parent = g_pending.dest;
             }
@@ -291,8 +389,9 @@ void draw()
         return std::string( row.slot ) == "持握";
     } ) );
     const int worn_count = static_cast<int>( rows.size() ) - wielded_count;
-    ImGui::TextDisabled( "持握 %d ｜ 穿戴 %d ｜ 点击物品可持握/卸下，容器可转移", wielded_count,
-                         worn_count );
+    const int backpack_count = static_cast<int>( rows.size() ) - wielded_count - worn_count;
+    ImGui::TextDisabled( "持握 %d ｜ 穿戴 %d ｜ 背包 %d ｜ 点击选择，拖到容器可移入",
+                         wielded_count, worn_count, backpack_count );
     ImGui::Separator();
 
     const float inner_height = ImGui::GetContentRegionAvail().y;
@@ -314,6 +413,8 @@ void draw()
                 g_selected = row.ptr;
                 g_selected_parent = nullptr;
             }
+            draw_drag_source( *row.ptr, nullptr );
+            accept_container_drop( *row.ptr );
             ImGui::SameLine();
             const std::size_t kids = contents_of( *row.ptr ).size();
             ImGui::TextDisabled( kids == 0 ? "空" : "%zu 件", kids );
@@ -333,49 +434,76 @@ void draw()
                                  units::to_gram( it.weight() ) / 1000.0,
                                  units::to_milliliter( it.volume() ) / 1000.0,
                                  contents_of( it ).size() );
-            if( g_selected_parent != nullptr ) {
-                ImGui::TextDisabled( "位于：%s", plain_name( *g_selected_parent ).c_str() );
-                ImGui::Separator();
-                if( ImGui::Button( "取出到背包", ImVec2( 130.0f, 0.0f ) ) ) {
-                    g_pending = { pending_kind::take_child, &it, g_selected_parent, nullptr };
-                }
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth( 180.0f );
-                if( ImGui::BeginCombo( "移入容器", "选择目标容器" ) ) {
-                    for( std::size_t i = 0; i < rows.size(); ++i ) {
-                        item *dest = rows[i].ptr;
-                        if( dest == g_selected_parent || !dest->is_container() ) {
+            auto draw_move_combo = [&]() {
+                ImGui::SetNextItemWidth( 240.0f );
+                if( ImGui::BeginCombo( "移入容器", "选择目标容器（含嵌套）" ) ) {
+                    std::vector<container_choice> choices;
+                    for( const gear_row &row : rows ) {
+                        if( row.ptr != nullptr ) {
+                            collect_containers( *row.ptr, plain_name( *row.ptr ), choices );
+                        }
+                    }
+                    for( std::size_t i = 0; i < choices.size(); ++i ) {
+                        item *dest = choices[i].ptr;
+                        if( dest == g_selected_parent || dest == &it || contains_item( it, dest ) ) {
                             continue;
                         }
-                        char label[256];
-                        std::snprintf( label, sizeof( label ), "%s##dest%zu", plain_name( *dest ).c_str(), i );
+                        char label[512];
+                        std::snprintf( label, sizeof( label ), "%s##dest%zu", choices[i].path.c_str(), i );
                         if( ImGui::Selectable( label ) ) {
                             g_pending = { pending_kind::move_child, &it, g_selected_parent, dest };
                         }
                     }
                     ImGui::EndCombo();
                 }
+            };
+            if( g_selected_parent != nullptr ) {
+                ImGui::TextDisabled( "位于：%s", plain_name( *g_selected_parent ).c_str() );
+                ImGui::Separator();
+                if( it.made_of( LIQUID ) ) {
+                    ImGui::BeginDisabled();
+                }
+                if( ImGui::Button( "取出到背包", ImVec2( 130.0f, 0.0f ) ) ) {
+                    g_pending = { pending_kind::take_child, &it, g_selected_parent, nullptr };
+                }
+                if( it.made_of( LIQUID ) ) {
+                    ImGui::EndDisabled();
+                    ImGui::TextDisabled( "液体需倒入合适容器，不能直接取出到背包。" );
+                } else {
+                    ImGui::SameLine();
+                }
+                draw_move_combo();
             } else {
                 const int top_row_index = row_of( rows, &it );
                 if( top_row_index >= 0 ) {
-                    const bool wielded = std::string( rows[top_row_index].slot ) == "持握";
+                    const std::string slot = rows[top_row_index].slot;
+                    const bool wielded = slot == "持握";
                     ImGui::Separator();
                     if( wielded ) {
                         if( ImGui::Button( "收起（放回背包）", ImVec2( 170.0f, 0.0f ) ) ) {
                             g_pending = { pending_kind::unwield, &it, nullptr, nullptr };
-                        }
-                        ImGui::SameLine();
-                        if( ImGui::Button( "穿上", ImVec2( 90.0f, 0.0f ) ) ) {
-                            g_pending = { pending_kind::wear, &it, nullptr, nullptr };
                         }
                     } else {
                         if( ImGui::Button( "持握", ImVec2( 90.0f, 0.0f ) ) ) {
                             g_pending = { pending_kind::wield, &it, nullptr, nullptr };
                         }
                         ImGui::SameLine();
-                        if( ImGui::Button( "卸下（放回背包）", ImVec2( 170.0f, 0.0f ) ) ) {
-                            g_pending = { pending_kind::takeoff, &it, nullptr, nullptr };
+                        if( slot == "穿戴" ) {
+                            if( ImGui::Button( "卸下（放回背包）", ImVec2( 170.0f, 0.0f ) ) ) {
+                                g_pending = { pending_kind::takeoff, &it, nullptr, nullptr };
+                            }
                         }
+                    }
+                    if( it.is_armor() && slot != "穿戴" ) {
+                        if( wielded ) {
+                            ImGui::SameLine();
+                        }
+                        if( ImGui::Button( "穿上", ImVec2( 90.0f, 0.0f ) ) ) {
+                            g_pending = { pending_kind::wear, &it, nullptr, nullptr };
+                        }
+                    }
+                    if( slot == "背包" ) {
+                        draw_move_combo();
                     }
                 } else {
                     ImGui::TextDisabled( "（该物品已不在装备栏）" );
