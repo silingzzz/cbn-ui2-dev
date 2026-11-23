@@ -8,6 +8,9 @@
 
 #if defined( TILES )
 
+#include <cstdlib>
+#include <cstring>
+
 #include <imgui.h>
 
 namespace
@@ -159,6 +162,18 @@ void draw_second_window()
     ImGui::End();
 }
 
+// The PR-1.5 demo windows are scaffolding: they all open at once, stack above
+// the real business windows and swallow clicks aimed at them. When testing the
+// business UI set CBN_IMGUI_DEMO=0 to draw only the real windows.
+auto demo_windows_enabled() -> bool
+{
+    static const bool enabled = []() {
+        const char *const value = std::getenv( "CBN_IMGUI_DEMO" );
+        return !( value != nullptr && std::strcmp( value, "0" ) == 0 );
+    }();
+    return enabled;
+}
+
 void draw_controls_window()
 {
     if( !g_controls_open ) {
@@ -195,15 +210,17 @@ void reset()
 
 void draw()
 {
-    draw_controls_window();
-    draw_main_window();
-    draw_second_window();
-    // PR-1.5 B batch: list and table components.
-    lists::draw();
-    // PR-1.5 C batch: context menu, tooltip and toast feedback.
-    menu::draw();
-    // PR-1.5 D batch: focus, keyboard and text input.
-    focus::draw();
+    if( demo_windows_enabled() ) {
+        draw_controls_window();
+        draw_main_window();
+        draw_second_window();
+        // PR-1.5 B batch: list and table components.
+        lists::draw();
+        // PR-1.5 C batch: context menu, tooltip and toast feedback.
+        menu::draw();
+        // PR-1.5 D batch: focus, keyboard and text input.
+        focus::draw();
+    }
     // PR-2A AIM-1: read-only real backpack window.
     ui2::aim::draw();
     // PR-3A: read-only worn/wielded equipment and nested containers.
