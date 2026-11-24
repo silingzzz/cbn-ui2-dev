@@ -668,8 +668,14 @@ auto take_redraw_request() -> bool
 
 auto want_capture_mouse() -> bool
 {
-    return g_open && g_initialized && ImGui::GetCurrentContext() != nullptr &&
-           ImGui::GetIO().WantCaptureMouse;
+    // The platform shell is modal while visible. Mouse motion must not reach
+    // the game just because the pointer crossed a spot where ImGui's
+    // WantCaptureMouse had not caught up yet: one leaked MOUSE_MOVE starts
+    // game::handle_mouseview() and its old Mouse View panel, which looks like
+    // the map/list scrolling by itself as the cursor moves.
+    // World inspect will need an explicit non-modal mode later; do not weaken
+    // this global gate for it.
+    return g_open && g_initialized;
 }
 
 auto want_capture_keyboard() -> bool
