@@ -459,6 +459,8 @@ std::optional<construction_id> construction_menu( const bool blueprint )
     int offset = 0;
     // Screen rectangles of the construction rows drawn last frame, for mouse input.
     std::vector<std::pair<inclusive_rectangle<point>, int>> construct_rects;
+    // Screen rectangles of the construction category tabs drawn last frame.
+    std::vector<std::pair<inclusive_rectangle<point>, int>> construct_tab_rects;
     bool exit = false;
     construction_category_id category_id;
     std::vector<construction_group_str_id> constructs;
@@ -919,6 +921,7 @@ std::optional<construction_id> construction_menu( const bool blueprint )
 
     ui.on_redraw( [&]( ui_adaptor & ui ) {
         construct_rects.clear();
+        construct_tab_rects.clear();
         draw_grid( w_con, w_list_width + w_list_x0 );
 
         // Erase existing tab selection & list of constructions
@@ -1007,6 +1010,12 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                 const std::string display_label = base_label;
                 const auto label_width = utf8_width( display_label );
                 draw_tab( w_tabs, start_x, display_label, is_selected );
+                construct_tab_rects.emplace_back(
+                    inclusive_rectangle<point>(
+                        point( getbegx( w_tabs ) + start_x, getbegy( w_tabs ) ),
+                        point( getbegx( w_tabs ) + start_x + label_width + 1,
+                               getbegy( w_tabs ) + 1 ) ),
+                    static_cast<int>( label_index ) );
                 start_x += label_width + 3;
             }
             if( first_tab > 0 ) {
@@ -1382,14 +1391,32 @@ std::optional<construction_id> construction_menu( const bool blueprint )
                 std::fprintf( stderr, " select=%d\n", select );
                 std::fflush( stderr );
             }
-            for( const auto &rect : construct_rects ) {
-                if( rect.first.contains( cell ) ) {
-                    select = rect.second;
-                    break;
+            bool hit_tab = false;
+            if( action == "SELECT" ) {
+                for( const auto &rect : construct_tab_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        tabindex = rect.second;
+                        select = 0;
+                        offset = 0;
+                        update_info = true;
+                        update_cat = true;
+                        hit_tab = true;
+                        break;
+                    }
                 }
             }
-            if( action == "SELECT" ) {
-                action = "CONFIRM";
+            if( !hit_tab ) {
+                for( const auto &rect : construct_rects ) {
+                    if( rect.first.contains( cell ) ) {
+                        select = rect.second;
+                        break;
+                    }
+                }
+                if( action == "SELECT" ) {
+                    action = "CONFIRM";
+                }
+            } else {
+                action.clear();
             }
         }
         if( action == "SCROLL_UP" ) {
