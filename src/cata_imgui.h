@@ -52,6 +52,11 @@ void forget_key_ownership();
 /// (Esc / Enter-commit semantics for forms).
 void clear_widget_focus();
 
+/// Temporarily yield the mouse/keyboard to a legacy ncurses popup.
+/// The overlay is hidden while the popup is active and restored afterwards.
+void begin_legacy_popup();
+void end_legacy_popup();
+
 /// Diagnostic counter (only active with CBN_IMGUI_TRACE set): count presented frames.
 void trace_present();
 

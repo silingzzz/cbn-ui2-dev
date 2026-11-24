@@ -6,12 +6,31 @@
 
 #include "cached_options.h"
 #include "catacharset.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cursesport.h"
 #include "ime.h"
 #include "input.h"
 #include "output.h"
 #include "sdl_wrappers.h"
 #include "ui_manager.h"
+
+#if defined( TILES )
+namespace
+{
+// A legacy modal popup must own the mouse and keyboard while it runs. The
+// ImGui overlay hides for its lifetime and comes back afterwards.
+struct legacy_imgui_gate {
+    legacy_imgui_gate() {
+        cata_imgui::begin_legacy_popup();
+    }
+    ~legacy_imgui_gate() {
+        cata_imgui::end_legacy_popup();
+    }
+};
+} // namespace
+#endif
 
 query_popup::query_popup()
     : cur( 0 ), default_text_color( c_white ), anykey( false ), cancel( false ), ontop( false ),
@@ -379,6 +398,9 @@ query_popup::result query_popup::query_once()
 query_popup::result query_popup::query()
 {
     ime_sentry sentry( ime_sentry::disable );
+#if defined( TILES )
+    legacy_imgui_gate imgui_gate;
+#endif
 
     std::shared_ptr<ui_adaptor> ui = create_or_get_adaptor();
 

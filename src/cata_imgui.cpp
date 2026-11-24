@@ -41,6 +41,11 @@ bool g_clear_text_focus = false;
 SDL_Window *g_window = nullptr;
 SDL_Renderer *g_renderer = nullptr;
 
+// Legacy ncurses popups (query_popup) need the mouse and keyboard while they
+// are running. The overlay yields for their lifetime and is restored after.
+int g_legacy_popup_depth = 0;
+bool g_legacy_restore_overlay = false;
+
 // Prototype widgets only; real UI work starts in PR-2.
 char g_text_buffer[128] = "你好, Cataclysm";
 int g_slider_value = 50;
@@ -379,6 +384,8 @@ void shutdown()
     ImGui::DestroyContext();
     g_initialized = false;
     g_open = false;
+    g_legacy_popup_depth = 0;
+    g_legacy_restore_overlay = false;
 }
 
 auto process_event( const SDL_Event &event ) -> bool
@@ -397,7 +404,7 @@ auto process_event( const SDL_Event &event ) -> bool
     // presentation), so translate before handing the event over -- otherwise
     // every hit test is off by the scale factor. When logical presentation is
     // disabled the coordinates already match, so the event is forwarded as-is.
-    SDL_Event converted;
+    SDL_Event converted{};
     const SDL_Event *to_feed = &event;
     const bool is_mouse = event.type == SDL_EVENT_MOUSE_MOTION ||
                           event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
@@ -458,6 +465,11 @@ auto process_event( const SDL_Event &event ) -> bool
     }
 
     if( event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F10 ) {
+        // While a legacy popup owns input, F10 must not pull the overlay back
+        // over it.
+        if( g_legacy_popup_depth > 0 ) {
+            return true;
+        }
         // F10 toggles the overlay and belongs to it for this press (including
         // auto-repeat), so the game never sees the key up or the repeats.
         if( !event.key.repeat ) {
@@ -529,6 +541,39 @@ void forget_key_ownership()
 {
     for( int8_t &owner : key_owner_table ) {
         owner = KEY_OWNER_NONE;
+    }
+}
+
+void begin_legacy_popup()
+{
+    ++g_legacy_popup_depth;
+    if( g_legacy_popup_depth != 1 ) {
+        return;
+    }
+    g_legacy_restore_overlay = g_open;
+    if( g_open ) {
+        // A legacy query popup is about to read input. Hide the overlay so its
+        // mouse clicks and keys reach the popup, not the ImGui shell.
+        g_open = false;
+        g_redraw_pending = true;
+        g_clear_text_focus = true;
+        forget_key_ownership();
+    }
+}
+
+void end_legacy_popup()
+{
+    if( g_legacy_popup_depth == 0 ) {
+        return;
+    }
+    --g_legacy_popup_depth;
+    if( g_legacy_popup_depth != 0 ) {
+        return;
+    }
+    if( g_legacy_restore_overlay ) {
+        g_legacy_restore_overlay = false;
+        g_open = true;
+        g_redraw_pending = true;
     }
 }
 
