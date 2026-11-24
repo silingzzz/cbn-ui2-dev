@@ -205,9 +205,14 @@ void game::list_missions()
             bool hit_tab = false;
             for( const auto &rect : mission_tab_rects ) {
                 if( rect.first.contains( cell ) ) {
-                    tab = static_cast<tab_mode>( static_cast<int>( rect.second ) );
-                    selection = 0;
+                    // Hovering over a tab must not change the active tab; only an
+                    // explicit click selects it, and a hover must not fall through
+                    // to the mission rows underneath the tab bar.
                     hit_tab = true;
+                    if( action == "SELECT" ) {
+                        tab = static_cast<tab_mode>( static_cast<int>( rect.second ) );
+                        selection = 0;
+                    }
                     break;
                 }
             }
