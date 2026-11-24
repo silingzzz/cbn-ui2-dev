@@ -1265,13 +1265,21 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
                         break;
                     }
                     case player_display_tab::bionics: {
-                        const int height = getmaxy( pane.content ) - 1;
+                        // The bionics tab draws its first data row at window y == 2
+                        // (y == 0 is the title, y == 1 is the power line), and the
+                        // drawing code uses height == getmaxy( w_bionics ) - 2.
+                        // The shared `row` is `rely - 1`, so subtract one more here
+                        // to keep the click on the same line that was drawn.
+                        const int height = getmaxy( pane.content ) - 2;
                         const std::pair<int, int> range = subindex_around_cursor(
                                 bionicslist.size(), height, line, curtab == player_display_tab::bionics );
-                        const size_t idx = static_cast<size_t>( range.first ) +
-                                           static_cast<size_t>( row );
-                        if( idx < bionicslist.size() ) {
-                            line = static_cast<unsigned>( idx );
+                        const int click_line = row - 1;
+                        if( click_line >= 0 ) {
+                            const size_t idx = static_cast<size_t>( range.first ) +
+                                               static_cast<size_t>( click_line );
+                            if( idx < bionicslist.size() ) {
+                                line = static_cast<unsigned>( idx );
+                            }
                         }
                         break;
                     }
