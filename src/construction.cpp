@@ -1420,9 +1420,18 @@ std::optional<construction_id> construction_menu( const bool blueprint )
             }
         }
         if( action == "SCROLL_UP" ) {
-            action = select > 0 ? "UP" : "";
+            if( !constructs.empty() ) {
+                select = std::max( 0, select - w_list_height );
+                update_info = true;
+            }
+            action.clear();
         } else if( action == "SCROLL_DOWN" ) {
-            action = select + 1 < static_cast<int>( constructs.size() ) ? "DOWN" : "";
+            if( !constructs.empty() ) {
+                select = std::min( static_cast<int>( constructs.size() ) - 1,
+                                   select + w_list_height );
+                update_info = true;
+            }
+            action.clear();
         }
         if( action == "FILTER" ) {
             struct filter_example {
