@@ -1761,3 +1761,21 @@ TEST_CASE("opened_curtain_closes_with_furniture_overlay", "[map][door][curtain][
     CHECK(here.close_door(p, true, false));
     CHECK(here.furn(p) == furn_id("f_curtain"));
 }
+
+TEST_CASE("door_closes_with_ordinary_furniture_overlay", "[map][door][regression]") {
+    clear_all_state();
+    const auto cleanup = on_out_of_scope([] { clear_all_state(); });
+    map& here = get_map();
+    const tripoint_bub_ms p(60, 61, 0);
+
+    here.ter_set(p, ter_id("t_door_c"));
+    here.furn_set(p, furn_id("f_chair"));
+    REQUIRE(here.open_door(&get_avatar(), p, true));
+    REQUIRE(here.ter(p) == ter_id("t_door_o"));
+    REQUIRE(here.furn(p) == furn_id("f_chair"));
+
+    CHECK(here.close_door(p, true, true));
+    CHECK(here.close_door(p, true, false));
+    CHECK(here.ter(p) == ter_id("t_door_c"));
+    CHECK(here.furn(p) == furn_id("f_chair"));
+}
