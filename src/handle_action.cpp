@@ -2010,16 +2010,30 @@ bool game::handle_action()
                 if( !seen || !near ) {
                     ui2::world::set_result( "太远，开门需站在相邻格", true );
                 } else {
+                    const auto ter_before = get_map().ter( target );
+                    const auto furn_before = get_map().furn( target );
+                    const bool vehicle_target = get_map().veh_at( target ).has_value();
                     open_at( target );
-                    ui2::world::set_result( "已尝试开门", false );
+                    const bool changed = get_map().ter( target ) != ter_before ||
+                                         get_map().furn( target ) != furn_before;
+                    const bool success = changed || vehicle_target;
+                    ui2::world::set_result( success ? "已开门" :
+                                            "未能开门，详见游戏消息", !success );
                 }
                 break;
             case ui2::world::action_kind::close:
                 if( !seen || !near ) {
                     ui2::world::set_result( "太远，关门需站在相邻格", true );
                 } else {
+                    const auto ter_before = get_map().ter( target );
+                    const auto furn_before = get_map().furn( target );
+                    const bool vehicle_target = get_map().veh_at( target ).has_value();
                     close_at( target );
-                    ui2::world::set_result( "已尝试关门", false );
+                    const bool changed = get_map().ter( target ) != ter_before ||
+                                         get_map().furn( target ) != furn_before;
+                    const bool success = changed || vehicle_target;
+                    ui2::world::set_result( success ? "已关门" :
+                                            "未能关门，详见游戏消息", !success );
                 }
                 break;
             case ui2::world::action_kind::walk_to:

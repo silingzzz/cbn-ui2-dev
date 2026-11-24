@@ -4871,7 +4871,10 @@ auto map::close_door(const tripoint_bub_ms& p, const bool inside, const bool che
     se.description = _("swish");
     se.id = "close_door";
     se.variant = ter.id.str();
-    if (ter.close && !furn.id) {
+    // A closed curtain furniture can sit on an open window terrain. It has an
+    // open link but no close link, so do not let it mask the terrain's close
+    // link; otherwise the curtain can be opened but never closed again.
+    if (ter.close && (!furn.id || (furn.open && !furn.close))) {
         if (!check_only) {
             sounds::sound(se);
             ter_set(p, ter.close);

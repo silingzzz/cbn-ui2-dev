@@ -65,6 +65,26 @@ auto has_items_at( const tripoint_bub_ms &p ) -> bool
     return !get_map().i_at( p ).empty();
 }
 
+auto action_label( ui2::world::action_kind kind, const tripoint_bub_ms &p ) -> const char *
+{
+    if( kind != ui2::world::action_kind::open &&
+        kind != ui2::world::action_kind::close ) {
+        return kind == ui2::world::action_kind::examine ? "查看" :
+               kind == ui2::world::action_kind::pickup ? "拾取" :
+               kind == ui2::world::action_kind::walk_to ? "走到" : "";
+    }
+    map &here = get_map();
+    const bool curtain = here.has_flag( "BARRICADABLE_WINDOW_CURTAINS", p ) ||
+                         here.furn( p ).id().str().find( "curtain" ) != std::string::npos;
+    if( curtain ) {
+        return kind == ui2::world::action_kind::open ? "打开窗帘" : "关闭窗帘";
+    }
+    if( here.has_flag( "WINDOW", p ) ) {
+        return kind == ui2::world::action_kind::open ? "打开窗户" : "关闭窗户";
+    }
+    return kind == ui2::world::action_kind::open ? "开门" : "关门";
+}
+
 auto action_reason( ui2::world::action_kind kind ) -> std::string
 {
     if( kind == ui2::world::action_kind::none ) {
@@ -99,7 +119,7 @@ auto action_reason( ui2::world::action_kind kind ) -> std::string
                 return "太远，需站在相邻格";
             }
             if( !can_open_at( you, p ) ) {
-                return "这里没有可打开的门";
+                return "这里没有可打开的门/窗/窗帘";
             }
             return {};
         case ui2::world::action_kind::close:
@@ -107,7 +127,7 @@ auto action_reason( ui2::world::action_kind kind ) -> std::string
                 return "太远，需站在相邻格";
             }
             if( !can_close_at( you, p ) ) {
-                return "这里没有可关闭的门";
+                return "这里没有可关闭的门/窗/窗帘";
             }
             return {};
         case ui2::world::action_kind::walk_to:
@@ -232,7 +252,7 @@ void draw_action_button( const char *label, ui2::world::action_kind kind )
 {
     const std::string reason = action_reason( kind );
     ImGui::BeginDisabled( !reason.empty() );
-    if( ImGui::Button( label, ImVec2( 62.0f, 28.0f ) ) ) {
+    if( ImGui::Button( label, ImVec2( 66.0f, 28.0f ) ) ) {
         queue( kind );
     }
     ImGui::EndDisabled();
@@ -251,6 +271,11 @@ void draw_context_menu()
     if( !g_context_open ) {
         return;
     }
+    if( !g_selected ) {
+        g_context_open = false;
+        return;
+    }
+    const tripoint_bub_ms p = *g_selected;
     ImGui::SetNextWindowPos( g_context_pos, ImGuiCond_Appearing );
     if( !ImGui::BeginPopup( "##world_actions" ) ) {
         g_context_open = false;
@@ -259,7 +284,7 @@ void draw_context_menu()
     ImGui::TextDisabled( "地块动作" );
     ImGui::Separator();
 
-    auto item = []( const char *label, ui2::world::action_kind kind ) {
+    auto item = [&p]( const char *label, ui2::world::action_kind kind ) {
         const std::string reason = action_reason( kind );
         if( !reason.empty() ) {
             ImGui::BeginDisabled();
@@ -277,8 +302,8 @@ void draw_context_menu()
     };
     item( "查看", ui2::world::action_kind::examine );
     item( "拾取", ui2::world::action_kind::pickup );
-    item( "开门", ui2::world::action_kind::open );
-    item( "关门", ui2::world::action_kind::close );
+    item( action_label( ui2::world::action_kind::open, p ), ui2::world::action_kind::open );
+    item( action_label( ui2::world::action_kind::close, p ), ui2::world::action_kind::close );
     item( "走到", ui2::world::action_kind::walk_to );
     ImGui::Separator();
     if( ImGui::MenuItem( "取消" ) ) {
@@ -471,20 +496,20 @@ void draw()
         ImGui::SameLine();
         draw_action_button( "拾取", action_kind::pickup );
         ImGui::SameLine();
-        draw_action_button( "开门", action_kind::open );
+        draw_action_button( action_label( action_kind::open, *g_selected ), action_kind::open );
         ImGui::SameLine();
-        draw_action_button( "关门", action_kind::close );
+        draw_action_button( action_label( action_kind::close, *g_selected ), action_kind::close );
         ImGui::SameLine();
         draw_action_button( "走到", action_kind::walk_to );
 
         const avatar &you = get_avatar();
         const bool near = adjacent( you, *g_selected );
         if( can_open_at( you, *g_selected ) ) {
-            ImGui::TextDisabled( "门：当前可开" );
+            ImGui::TextDisabled( "%s：当前可开", action_label( action_kind::open, *g_selected ) );
         } else if( can_close_at( you, *g_selected ) ) {
-            ImGui::TextDisabled( "门：当前可关" );
+            ImGui::TextDisabled( "%s：当前可关", action_label( action_kind::close, *g_selected ) );
         } else if( near ) {
-            ImGui::TextDisabled( "门：相邻格没有可开关的门" );
+            ImGui::TextDisabled( "门/窗/窗帘：相邻格没有可开关的目标" );
         }
 
         if( !near ) {

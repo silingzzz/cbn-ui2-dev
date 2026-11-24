@@ -1736,3 +1736,28 @@ TEST_CASE("flammable_fields_can_be_ignited", "[map][field][fire]") {
     CHECK(fire->get_field_intensity() == std::max(2, intensity));
     CHECK(fire->get_field_age() == -10_minutes * intensity);
 }
+
+TEST_CASE("opened_curtain_closes_with_furniture_overlay", "[map][door][curtain][regression]") {
+    clear_all_state();
+    const auto cleanup = on_out_of_scope([] { clear_all_state(); });
+    map& here = get_map();
+    const tripoint_bub_ms p(60, 60, 0);
+
+    here.ter_set(p, ter_id("t_curtains"));
+    here.furn_set(p, furn_id("f_curtain"));
+    REQUIRE(here.open_door(&get_avatar(), p, true));
+    REQUIRE(here.ter(p) == ter_id("t_window_domestic"));
+    REQUIRE(here.furn(p) == furn_id("f_curtain"));
+    CHECK_FALSE(here.close_door(p, false, true));
+
+    CHECK(here.close_door(p, true, true));
+    CHECK(here.close_door(p, true, false));
+    CHECK(here.ter(p) == ter_id("t_curtains"));
+    CHECK(here.furn(p) == furn_id("f_curtain"));
+
+    here.ter_set(p, ter_id("t_floor"));
+    here.furn_set(p, furn_id("f_curtain_open"));
+    CHECK(here.close_door(p, true, true));
+    CHECK(here.close_door(p, true, false));
+    CHECK(here.furn(p) == furn_id("f_curtain"));
+}
