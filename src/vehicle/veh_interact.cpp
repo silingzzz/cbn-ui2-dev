@@ -1191,9 +1191,9 @@ void veh_interact::do_install() {
 auto veh_interact::move_in_list(
     int& pos, const std::string& action, const int size, const int header) const -> bool {
     int lines_per_page = page_size - header;
-    if (action == "PREV_TAB" || action == "LEFT") {
+    if (action == "SCROLL_UP" || action == "PREV_TAB" || action == "LEFT") {
         pos -= lines_per_page;
-    } else if (action == "NEXT_TAB" || action == "RIGHT") {
+    } else if (action == "SCROLL_DOWN" || action == "NEXT_TAB" || action == "RIGHT") {
         pos += lines_per_page;
     } else if (action == "UP") {
         pos--;
