@@ -13,6 +13,12 @@ void toggle();
 void set_open( bool open );
 void draw();
 
+/// True when the panel queued a game-state action that must run outside ImGui.
+bool has_deferred_action();
+
+/// Run one queued action from game::handle_action(); returns true if consumed.
+bool take_deferred_action();
+
 } // namespace messages
 } // namespace ui2
 

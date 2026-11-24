@@ -33,6 +33,9 @@ char g_search[128] = "";
 int g_activity_total_moves = 0;
 bool g_pending_cancel = false;
 bool g_pending_start = false;
+const recipe *g_pending_recipe = nullptr;
+int g_pending_batch = 1;
+std::string g_notice;
 
 struct queue_entry {
     const recipe *rec = nullptr;
@@ -107,6 +110,12 @@ void start_craft( const recipe &rec, int batch )
     Character &you = get_avatar();
     g_activity_total_moves = rec.batch_time( batch, 1.0f, 0 );
     you.make_craft( rec.ident(), batch, you.bub_pos() );
+    if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+        g_notice = "已提交制作：" + plain_text( rec.result_name() ) + " ×" +
+                   std::to_string( batch );
+    } else {
+        g_notice = "未能启动制作：" + plain_text( rec.result_name() );
+    }
     add_msg( m_info, "新版制作：提交 %s ×%d，组件与工具仍由原制作流程检查。",
              plain_text( rec.result_name() ).c_str(), batch );
 }
@@ -133,6 +142,62 @@ void set_open( bool open )
     g_open = open;
 }
 
+bool has_deferred_action()
+{
+    if( g_pending_cancel || g_pending_start ) {
+        return true;
+    }
+    return g_open && !g_queue_blocked && !get_avatar().activity && !g_queue.empty();
+}
+
+bool take_deferred_action()
+{
+    Character &you = get_avatar();
+    if( g_pending_cancel ) {
+        g_pending_cancel = false;
+        if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+            you.cancel_activity();
+            you.invalidate_crafting_inventory();
+            g_activity_total_moves = 0;
+            g_queue_blocked = !g_queue.empty();
+            g_notice = g_queue.empty() ? "已取消当前制作。" : "已取消当前制作，队列暂停。";
+        } else {
+            g_notice = "当前没有可取消的制作。";
+        }
+        return true;
+    }
+    if( g_pending_start ) {
+        g_pending_start = false;
+        const recipe *rec = g_pending_recipe;
+        g_pending_recipe = nullptr;
+        if( rec == nullptr ) {
+            g_notice = "没有选中的配方。";
+            return true;
+        }
+        start_craft( *rec, std::max( 1, std::min( g_pending_batch, 50 ) ) );
+        return true;
+    }
+    if( g_open && !g_queue_blocked && !you.activity && !g_queue.empty() ) {
+        const queue_entry entry = g_queue.front();
+        const inventory &inv = you.crafting_inventory();
+        if( entry.rec != nullptr && entry.rec->deduped_requirements().can_make_with_inventory(
+                inv, entry.rec->get_component_filter(), entry.batch ) ) {
+            start_craft( *entry.rec, entry.batch );
+            if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+                g_queue.erase( g_queue.begin() );
+            } else {
+                g_queue_blocked = true;
+                g_notice = "队列首项未能启动，队列已暂停。";
+            }
+        } else {
+            g_queue_blocked = true;
+            g_notice = "队列首项材料不足，队列已暂停。";
+        }
+        return true;
+    }
+    return false;
+}
+
 void draw()
 {
     if( !g_open ) {
@@ -147,7 +212,7 @@ void draw()
 
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 110.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 1180.0f, 585.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "制作（PR-4 预览）", &g_open ) ) {
+    if( !ImGui::Begin( "制作", &g_open ) ) {
         ImGui::End();
         return;
     }
@@ -159,6 +224,9 @@ void draw()
                          static_cast<int>( rows.size() ), g_batch );
     ImGui::SameLine();
     ImGui::Checkbox( "仅材料齐全", &g_only_craftable );
+    if( !g_notice.empty() ) {
+        ImGui::TextColored( ImVec4( 0.55f, 0.85f, 0.55f, 1.0f ), "%s", g_notice.c_str() );
+    }
     ImGui::SameLine();
     if( g_selected == nullptr ) {
         ImGui::BeginDisabled();
@@ -262,16 +330,23 @@ void draw()
             ImGui::SetNextItemWidth( 100.0f );
             ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
             g_batch = std::max( 1, std::min( g_batch, 50 ) );
-            ImGui::SameLine();
+            // Put the action buttons on a fresh row.  The numeric input's
+            // spinner buttons extend past its nominal width and used to leave
+            // the left half of "制作 1 次" non-clickable.
+            ImGui::NewLine();
             if( !can_make ) {
                 ImGui::BeginDisabled();
             }
             if( ImGui::Button( "制作 1 次" ) ) {
-                start_craft( rec, 1 );
+                g_pending_recipe = &rec;
+                g_pending_batch = 1;
+                g_pending_start = true;
             }
             ImGui::SameLine();
             if( ImGui::Button( "制作 N 次" ) ) {
-                start_craft( rec, g_batch );
+                g_pending_recipe = &rec;
+                g_pending_batch = g_batch;
+                g_pending_start = true;
             }
             if( !can_make ) {
                 ImGui::EndDisabled();
@@ -327,39 +402,6 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
-
-    if( g_pending_cancel ) {
-        g_pending_cancel = false;
-        if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
-            you.cancel_activity();
-            you.invalidate_crafting_inventory();
-            g_activity_total_moves = 0;
-            if( !g_queue.empty() ) {
-                g_queue_blocked = true;
-                add_msg( m_info, "新版制作：已取消当前制作，队列暂停。" );
-            } else {
-                add_msg( m_info, "新版制作：已取消当前制作。" );
-            }
-        }
-    }
-
-    if( !g_queue_blocked && !you.activity && !g_queue.empty() ) {
-        const queue_entry entry = g_queue.front();
-        const inventory &inv = you.crafting_inventory();
-        if( entry.rec->deduped_requirements().can_make_with_inventory(
-                inv, entry.rec->get_component_filter(), entry.batch ) ) {
-            start_craft( *entry.rec, entry.batch );
-            if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
-                g_queue.erase( g_queue.begin() );
-            } else {
-                g_queue_blocked = true;
-                add_msg( m_info, "新版制作：队列首项未能启动，队列已暂停。" );
-            }
-        } else {
-            g_queue_blocked = true;
-            add_msg( m_info, "新版制作：队列首项材料不足，队列已暂停。" );
-        }
-    }
 }
 
 } // namespace craft

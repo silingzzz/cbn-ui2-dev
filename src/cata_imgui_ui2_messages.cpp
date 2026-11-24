@@ -20,6 +20,9 @@ namespace
 bool g_open = false;
 char g_search[128] = {};
 int g_selected = -1;
+bool g_clear_pending = false;
+bool g_confirm_clear = false;
+std::string g_notice;
 
 bool contains_ci( const std::string &haystack, const std::string &needle )
 {
@@ -62,6 +65,23 @@ void set_open( bool open )
     g_open = open;
 }
 
+bool has_deferred_action()
+{
+    return g_clear_pending;
+}
+
+bool take_deferred_action()
+{
+    if( !g_clear_pending ) {
+        return false;
+    }
+    g_clear_pending = false;
+    Messages::clear_messages();
+    g_selected = -1;
+    g_notice = "消息记录已清空";
+    return true;
+}
+
 void draw()
 {
     if( !g_open ) {
@@ -84,7 +104,7 @@ void draw()
 
     ImGui::SetNextWindowPos( ImVec2( 980.0f, 110.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 700.0f, 560.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "消息记录（只读预览）", &g_open ) ) {
+    if( !ImGui::Begin( "消息记录", &g_open ) ) {
         ImGui::End();
         return;
     }
@@ -94,6 +114,29 @@ void draw()
     ImGui::SameLine();
     ImGui::TextDisabled( "显示 %d / %d 条", static_cast<int>( visible.size() ),
                          static_cast<int>( all.size() ) );
+    // Keep the destructive action on its own row.  Sharing the search row put
+    // its hit box underneath the wide search widget on some DPI/font metrics.
+    ImGui::NewLine();
+    if( ImGui::Button( "清空记录" ) ) {
+        g_confirm_clear = true;
+    }
+    if( g_confirm_clear ) {
+        ImGui::TextColored( ImVec4( 0.95f, 0.60f, 0.55f, 1.0f ),
+                            "确认清空当前消息记录？不可撤销。" );
+        ImGui::SameLine();
+        if( ImGui::Button( "确认清空" ) ) {
+            g_clear_pending = true;
+            g_confirm_clear = false;
+            g_notice.clear();
+        }
+        ImGui::SameLine();
+        if( ImGui::Button( "取消" ) ) {
+            g_confirm_clear = false;
+        }
+    }
+    if( !g_notice.empty() ) {
+        ImGui::TextColored( ImVec4( 0.55f, 0.85f, 0.55f, 1.0f ), "%s", g_notice.c_str() );
+    }
     ImGui::Separator();
 
     const float list_height = ImGui::GetContentRegionAvail().y * 0.48f;

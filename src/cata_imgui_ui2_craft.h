@@ -14,6 +14,12 @@ void toggle();
 bool is_open();
 void set_open( bool open );
 
+/// True when a start/cancel/queue step is waiting for the safe drain point.
+bool has_deferred_action();
+
+/// Run one queued craft action from game::handle_action().
+bool take_deferred_action();
+
 } // namespace craft
 } // namespace ui2
 

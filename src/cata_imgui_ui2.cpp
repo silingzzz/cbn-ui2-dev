@@ -212,14 +212,9 @@ void reset()
     g_main_open = true;
     g_second_open = true;
     g_controls_open = true;
-    // Every overlay open starts at the shell, not inside the last business
-    // window. The player can still go straight to AIM with the game action.
-    ui2::aim::set_open( false );
-    ui2::gear::set_open( false );
-    ui2::craft::set_open( false );
-    ui2::messages::set_open( false );
-    ui2::zone::set_open( false );
-    ui2::world::set_open( false );
+    // Business windows keep their open state across F10 hide/show. Hiding the
+    // overlay changes input ownership and pixels only; it must not silently
+    // reset the panel the player was working in.
 }
 
 void draw()

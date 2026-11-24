@@ -25,10 +25,6 @@ bool g_open = false;
 item *g_selected = nullptr;
 item *g_selected_parent = nullptr;
 
-/// One item-use request, consumed later by game::handle_action.
-item *g_deferred_use = nullptr;
-/// One drop request, consumed later so the activity starts outside ImGui.
-item *g_deferred_drop = nullptr;
 /// Restore the gear window after the game's own item UI returns.
 bool g_reopen_after_use = false;
 
@@ -52,6 +48,8 @@ struct pending_action {
 };
 
 pending_action g_pending;
+std::string g_notice;
+bool g_notice_error = false;
 
 struct gear_drag_payload {
     item *subject = nullptr;
@@ -290,9 +288,11 @@ void apply_pending()
         g_pending = {};
         return;
     }
-    Character &you = get_avatar();
+    avatar &you = get_avatar();
     item &it = *g_pending.subject;
     const std::string name = plain_name( it );
+    g_notice.clear();
+    g_notice_error = false;
     switch( g_pending.kind ) {
         case pending_kind::wield:
             if( !you.primary_weapon().is_null() ) {
@@ -303,12 +303,17 @@ void apply_pending()
             }
             if( !you.wield( it ) ) {
                 you.add_msg_if_player( m_info, "不能持握 %s。", name );
+                g_notice = "不能持握 " + name;
+                g_notice_error = true;
+            } else {
+                g_notice = "已持握 " + name;
             }
             g_selected = nullptr;
             g_selected_parent = nullptr;
             break;
         case pending_kind::takeoff:
             take_off_to_inventory( you, it );
+            g_notice = "已卸下 " + name;
             g_selected = nullptr;
             g_selected_parent = nullptr;
             break;
@@ -316,8 +321,11 @@ void apply_pending()
             detached_ptr<item> piece = you.remove_primary_weapon();
             if( piece ) {
                 you.i_add_or_drop( std::move( piece ) );
+                g_notice = "已收起 " + name;
             } else {
                 you.add_msg_if_player( m_warning, "不能收起 %s。", name );
+                g_notice = "不能收起 " + name;
+                g_notice_error = true;
             }
             g_selected = nullptr;
             g_selected_parent = nullptr;
@@ -327,12 +335,18 @@ void apply_pending()
             const auto check = you.can_wear( it );
             if( !check.success() ) {
                 you.add_msg_if_player( m_info, "%s", check.c_str() );
+                g_notice = "不能穿戴 " + name + "：" + check.c_str();
+                g_notice_error = true;
             } else {
                 detached_ptr<item> piece = it.detach();
                 detached_ptr<item> left = you.wear_item( std::move( piece ), true );
                 if( left ) {
                     you.i_add( std::move( left ) );
                     you.add_msg_if_player( m_warning, "穿不上 %s。", name );
+                    g_notice = "穿不上 " + name;
+                    g_notice_error = true;
+                } else {
+                    g_notice = "已穿上 " + name;
                 }
             }
             g_selected = nullptr;
@@ -342,27 +356,75 @@ void apply_pending()
         case pending_kind::move_child:
             if( g_pending.dest != nullptr ) {
                 move_child( you, it, *g_pending.dest );
+                g_notice = "已移入 " + plain_name( *g_pending.dest );
                 g_selected = g_pending.subject;
                 g_selected_parent = g_pending.dest;
+            } else {
+                g_notice = "没有可用的目标容器";
+                g_notice_error = true;
             }
             break;
         case pending_kind::take_child:
             if( g_pending.from != nullptr ) {
                 take_child_to_inventory( you, *g_pending.from, it );
+                g_notice = "已取出 " + name;
                 g_selected = nullptr;
                 g_selected_parent = nullptr;
+            } else {
+                g_notice = "原容器已失效";
+                g_notice_error = true;
             }
             break;
-        case pending_kind::use:
-            // Never call use_item from inside ImGui's draw callback: it can
-            // open another game UI and abort the current frame. Queue it for
-            // game::handle_action, which runs outside ImGui and owns UI input.
-            g_deferred_use = &it;
+        case pending_kind::use: {
+            bool still_owned = false;
+            for( const gear_row &row : build_rows() ) {
+                if( row.ptr != nullptr && contains_item( *row.ptr, &it ) ) {
+                    still_owned = true;
+                    break;
+                }
+            }
+            if( !still_owned ) {
+                you.add_msg_if_player( m_info, "该物品已不在装备栏，取消使用。" );
+                g_notice = "该物品已不在装备栏";
+                g_notice_error = true;
+                g_reopen_after_use = false;
+                break;
+            }
+            // This function is now called from game::handle_action(), outside
+            // ImGui's draw callback. It is safe to let the game open its own UI.
+            g_selected = nullptr;
+            g_selected_parent = nullptr;
+            g_notice = "正在使用 " + name;
+            avatar_action::use_item( you, &it );
+            if( g_reopen_after_use ) {
+                g_reopen_after_use = false;
+                g_open = true;
+                if( !cata_imgui::is_open() ) {
+                    cata_imgui::toggle();
+                }
+            }
             break;
-        case pending_kind::drop:
-            // Dropping starts an activity actor; defer it like item use.
-            g_deferred_drop = &it;
+        }
+        case pending_kind::drop: {
+            bool still_owned = false;
+            for( const gear_row &row : build_rows() ) {
+                if( row.ptr != nullptr && contains_item( *row.ptr, &it ) ) {
+                    still_owned = true;
+                    break;
+                }
+            }
+            if( !still_owned ) {
+                you.add_msg_if_player( m_info, "该物品已不在装备栏，取消丢弃。" );
+                g_notice = "该物品已不在装备栏";
+                g_notice_error = true;
+            } else {
+                g_selected = nullptr;
+                g_selected_parent = nullptr;
+                you.drop( it, you.bub_pos() );
+                g_notice = "已丢下 " + name;
+            }
             break;
+        }
         default:
             break;
     }
@@ -393,66 +455,15 @@ void set_open( bool open )
 
 bool has_deferred_action()
 {
-    return g_deferred_use != nullptr || g_deferred_drop != nullptr;
+    return g_pending.kind != pending_kind::none;
 }
 
 bool take_deferred_action()
 {
-    if( g_deferred_drop != nullptr ) {
-        item *requested = g_deferred_drop;
-        g_deferred_drop = nullptr;
-
-        bool still_owned = false;
-        for( const gear_row &row : build_rows() ) {
-            if( row.ptr != nullptr && contains_item( *row.ptr, requested ) ) {
-                still_owned = true;
-                break;
-            }
-        }
-        if( !still_owned ) {
-            get_avatar().add_msg_if_player( m_info, "该物品已不在装备栏，取消丢弃。" );
-            return true;
-        }
-        g_selected = nullptr;
-        g_selected_parent = nullptr;
-        // The drop activity owns the next game turn; return to the game.
-        g_open = false;
-        if( cata_imgui::is_open() ) {
-            cata_imgui::toggle();
-        }
-        get_avatar().drop( *requested, get_avatar().bub_pos() );
-        return true;
-    }
-    if( g_deferred_use == nullptr ) {
+    if( g_pending.kind == pending_kind::none ) {
         return false;
     }
-    item *requested = g_deferred_use;
-    g_deferred_use = nullptr;
-
-    bool still_owned = false;
-    for( const gear_row &row : build_rows() ) {
-        if( row.ptr != nullptr && contains_item( *row.ptr, requested ) ) {
-            still_owned = true;
-            break;
-        }
-    }
-    if( !still_owned ) {
-        get_avatar().add_msg_if_player( m_info, "该物品已不在装备栏，取消使用。" );
-        g_reopen_after_use = false;
-        return true;
-    }
-
-    // The item may be consumed or moved by the action; selection would dangle.
-    g_selected = nullptr;
-    g_selected_parent = nullptr;
-    avatar_action::use_item( get_avatar(), requested );
-    if( g_reopen_after_use ) {
-        g_reopen_after_use = false;
-        g_open = true;
-        if( !cata_imgui::is_open() ) {
-            cata_imgui::toggle();
-        }
-    }
+    apply_pending();
     return true;
 }
 
@@ -479,10 +490,21 @@ void draw()
     []( const gear_row & row ) {
         return std::string( row.slot ) == "持握";
     } ) );
-    const int worn_count = static_cast<int>( rows.size() ) - wielded_count;
-    const int backpack_count = static_cast<int>( rows.size() ) - wielded_count - worn_count;
+    const int worn_count = static_cast<int>( std::count_if( rows.begin(), rows.end(),
+    []( const gear_row & row ) {
+        return std::string( row.slot ) == "穿戴";
+    } ) );
+    const int backpack_count = static_cast<int>( std::count_if( rows.begin(), rows.end(),
+    []( const gear_row & row ) {
+        return std::string( row.slot ) == "背包";
+    } ) );
     ImGui::TextDisabled( "持握 %d ｜ 穿戴 %d ｜ 背包 %d ｜ 点击选择，拖到容器可移入",
                          wielded_count, worn_count, backpack_count );
+    if( !g_notice.empty() ) {
+        ImGui::TextColored( g_notice_error ? ImVec4( 0.95f, 0.45f, 0.35f, 1.0f )
+                            : ImVec4( 0.55f, 0.85f, 0.55f, 1.0f ),
+                            "%s", g_notice.c_str() );
+    }
     ImGui::Separator();
 
     const float inner_height = ImGui::GetContentRegionAvail().y;
@@ -612,13 +634,9 @@ void draw()
                         ImGui::Spacing();
                         if( ImGui::Button( "丢下到地面", ImVec2( 130.0f, 0.0f ) ) ) {
                             g_pending = { pending_kind::drop, &it, nullptr, nullptr };
-                            g_open = false;
-                            if( cata_imgui::is_open() ) {
-                                cata_imgui::toggle();
-                            }
                         }
                         if( ImGui::IsItemHovered() ) {
-                            ImGui::SetTooltip( "关闭覆盖层后在当前位置丢下；由游戏原有掉落动作结算。" );
+                            ImGui::SetTooltip( "在当前位置丢下；面板保持打开，由游戏原有掉落动作结算。" );
                         }
                     }
                 } else {
@@ -642,8 +660,6 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
-
-    apply_pending();
 }
 
 } // namespace gear

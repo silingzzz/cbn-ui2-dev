@@ -7,6 +7,8 @@
 #    include "cata_utility.h"
 #    include "cata_imgui.h"
 #    include "cata_imgui_ui2_gear.h"
+#    include "cata_imgui_ui2_craft.h"
+#    include "cata_imgui_ui2_messages.h"
 #    include "cata_imgui_ui2_world.h"
 #    include "catacharset.h"
 #    include "color.h"
@@ -3298,6 +3300,16 @@ static void CheckMessages()
                 const size_t btn = ev.button.button < 8 ? ev.button.button : 0;
                 mouse_button_owner[btn] = MOUSE_OWNER_NONE;
             }
+            // Run an overlay frame *now* for a click the overlay just owned.
+            // Otherwise the click only reaches ImGui on the next 30 Hz overlay
+            // pump, which can happen after this CheckMessages() call has
+            // already decided whether a deferred command woke the game.  The
+            // visible symptom is a button that only reacts to the next click.
+            if( cata_imgui::should_pump_frames() &&
+                ( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                  ev.type == SDL_EVENT_MOUSE_BUTTON_UP ) ) {
+                refresh_display();
+            }
             continue;
         }
         switch( ev.type ) {
@@ -3729,6 +3741,16 @@ static void CheckMessages()
             break;
         }
     }
+    // The platform shell is modal for the keyboard. `process_event()` normally
+    // consumes key events before they reach `last_input`, but input can also be
+    // populated by paths that do not pass through its return value (for example
+    // a legacy menu pumping keys while the overlay is on screen). Enforce the
+    // ownership rule at the delivery boundary: while the shell is visible, drop
+    // any keyboard event that still made it into `last_input`. Mouse events are
+    // left alone so the non-modal world panel keeps its click-through.
+    if( cata_imgui::is_open() && last_input.type == input_event_t::keyboard ) {
+        last_input = input_event();
+    }
     bool resized = false;
     if( resize_dims.has_value() ) {
         restore_on_out_of_scope<input_event> prev_last_input( last_input );
@@ -3772,7 +3794,8 @@ static void CheckMessages()
     // An overlay button queued a game action (e.g. item "use"). Wake the game
     // input loop with one synthetic click; game::handle_action consumes the
     // request before looking at that click, so it cannot move or select.
-    if( ( ui2::gear::has_deferred_action() || ui2::world::has_request() ||
+    if( ( ui2::gear::has_deferred_action() || ui2::messages::has_deferred_action() ||
+          ui2::craft::has_deferred_action() || ui2::world::has_request() ||
           ( ui2::world::is_open() && get_avatar().has_destination() ) ) &&
         last_input.type == input_event_t::error ) {
         last_input = input_event( MOUSE_BUTTON_LEFT, input_event_t::mouse );

@@ -3,6 +3,8 @@
 #include "cata_imgui.h"
 #include "cata_imgui_ui2_aim.h"
 #include "cata_imgui_ui2_gear.h"
+#include "cata_imgui_ui2_craft.h"
+#include "cata_imgui_ui2_messages.h"
 #include "cata_imgui_ui2_zone.h"
 #include "cata_imgui_ui2_world.h"
 #include "advanced_inv.h"
@@ -1967,6 +1969,12 @@ bool game::handle_action()
         // the synthetic input event that woke this loop.
         return false;
     }
+    if( ui2::messages::take_deferred_action() ) {
+        return false;
+    }
+    if( ui2::craft::take_deferred_action() ) {
+        return false;
+    }
     ui2::world::request world_request;
     if( ui2::world::take_request( world_request ) ) {
         const avatar &you = get_avatar();
@@ -2094,6 +2102,14 @@ bool game::handle_action()
             ctxt = get_player_input( action );
         }
     }
+#if defined( TILES )
+    // Space is bound to "jump" in DEFAULTMODE. The SDL event layer already
+    // assigns it to ImGui while the overlay is open, but keep a narrow fallback
+    // here for synthetic/replayed input: UI focus must never move the avatar.
+    if( ( cata_imgui::is_open() || ui2::gear::is_open() ) && action == "jump" ) {
+        return false;
+    }
+#endif
 
     const optional_vpart_position vp = m.veh_at( u.bub_pos() );
     const auto player_vehicle = vp ? &vp->vehicle() : nullptr;
