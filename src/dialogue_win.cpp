@@ -152,6 +152,9 @@ static auto print_responses( const catacurses::window &w, const page &responses,
     // First line we can print on, +1 for border, +2 for your name + newline
     const auto y_start = 2 + 1 + header_height;
     const auto x_end = std::max( x_start, getmaxx( w ) - 2 );
+    // response_rects are consumed against mouse_pixel_to_cell(), which returns
+    // absolute screen cells; store the rectangles in the same coordinate space.
+    const point win_origin( getbegx( w ), getbegy( w ) );
 
     int curr_y = y_start;
     for( const page_entry &entry : responses.entries ) {
@@ -173,8 +176,8 @@ static auto print_responses( const catacurses::window &w, const page &responses,
             curr_y += 1;
         }
         if( curr_y > first_y ) {
-            rects.emplace_back( inclusive_rectangle<point>( point( x_start, first_y ),
-                               point( x_end, curr_y - 1 ) ), entry.response_index );
+            rects.emplace_back( inclusive_rectangle<point>( win_origin + point( x_start, first_y ),
+                               win_origin + point( x_end, curr_y - 1 ) ), entry.response_index );
         }
     }
     return rects;
