@@ -10,6 +10,7 @@ namespace messages
 
 bool is_open();
 void toggle();
+void set_open( bool open );
 void draw();
 
 } // namespace messages

@@ -16,6 +16,7 @@ void draw();
 /// Development-preview entry point (the demo window button toggles this).
 void toggle();
 auto is_open() -> bool;
+void set_open( bool open );
 
 } // namespace aim
 } // namespace ui2

@@ -57,6 +57,11 @@ void toggle()
     g_open = !g_open;
 }
 
+void set_open( bool open )
+{
+    g_open = open;
+}
+
 void draw()
 {
     if( !g_open ) {
@@ -77,7 +82,7 @@ void draw()
         g_selected = -1;
     }
 
-    ImGui::SetNextWindowPos( ImVec2( 980.0f, 180.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowPos( ImVec2( 980.0f, 110.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 700.0f, 560.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "消息记录（只读预览）", &g_open ) ) {
         ImGui::End();

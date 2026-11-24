@@ -27,6 +27,8 @@ item *g_selected_parent = nullptr;
 
 /// One item-use request, consumed later by game::handle_action.
 item *g_deferred_use = nullptr;
+/// One drop request, consumed later so the activity starts outside ImGui.
+item *g_deferred_drop = nullptr;
 /// Restore the gear window after the game's own item UI returns.
 bool g_reopen_after_use = false;
 
@@ -39,6 +41,7 @@ enum class pending_kind {
     move_child,
     take_child,
     use,
+    drop,
 };
 
 struct pending_action {
@@ -356,6 +359,10 @@ void apply_pending()
             // game::handle_action, which runs outside ImGui and owns UI input.
             g_deferred_use = &it;
             break;
+        case pending_kind::drop:
+            // Dropping starts an activity actor; defer it like item use.
+            g_deferred_drop = &it;
+            break;
         default:
             break;
     }
@@ -379,13 +386,43 @@ void toggle()
     g_open = !g_open;
 }
 
+void set_open( bool open )
+{
+    g_open = open;
+}
+
 bool has_deferred_action()
 {
-    return g_deferred_use != nullptr;
+    return g_deferred_use != nullptr || g_deferred_drop != nullptr;
 }
 
 bool take_deferred_action()
 {
+    if( g_deferred_drop != nullptr ) {
+        item *requested = g_deferred_drop;
+        g_deferred_drop = nullptr;
+
+        bool still_owned = false;
+        for( const gear_row &row : build_rows() ) {
+            if( row.ptr != nullptr && contains_item( *row.ptr, requested ) ) {
+                still_owned = true;
+                break;
+            }
+        }
+        if( !still_owned ) {
+            get_avatar().add_msg_if_player( m_info, "该物品已不在装备栏，取消丢弃。" );
+            return true;
+        }
+        g_selected = nullptr;
+        g_selected_parent = nullptr;
+        // The drop activity owns the next game turn; return to the game.
+        g_open = false;
+        if( cata_imgui::is_open() ) {
+            cata_imgui::toggle();
+        }
+        get_avatar().drop( *requested, get_avatar().bub_pos() );
+        return true;
+    }
     if( g_deferred_use == nullptr ) {
         return false;
     }
@@ -431,7 +468,7 @@ void draw()
         g_selected_parent = nullptr;
     }
 
-    ImGui::SetNextWindowPos( ImVec2( 980.0f, 60.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowPos( ImVec2( 980.0f, 110.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 520.0f, 600.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "装备与容器", &g_open ) ) {
         ImGui::End();
@@ -572,6 +609,17 @@ void draw()
                     }
                     if( slot == "背包" ) {
                         draw_move_combo();
+                        ImGui::Spacing();
+                        if( ImGui::Button( "丢下到地面", ImVec2( 130.0f, 0.0f ) ) ) {
+                            g_pending = { pending_kind::drop, &it, nullptr, nullptr };
+                            g_open = false;
+                            if( cata_imgui::is_open() ) {
+                                cata_imgui::toggle();
+                            }
+                        }
+                        if( ImGui::IsItemHovered() ) {
+                            ImGui::SetTooltip( "关闭覆盖层后在当前位置丢下；由游戏原有掉落动作结算。" );
+                        }
                     }
                 } else {
                     ImGui::TextDisabled( "（该物品已不在装备栏）" );

@@ -7,6 +7,7 @@
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_messages.h"
 #include "cata_imgui_ui2_zone.h"
+#include "cata_imgui_ui2_shell.h"
 
 #if defined( TILES )
 
@@ -173,7 +174,7 @@ auto demo_windows_enabled() -> bool
 {
     static const bool enabled = []() {
         const char *const value = std::getenv( "CBN_IMGUI_DEMO" );
-        return !( value != nullptr && std::strcmp( value, "0" ) == 0 );
+        return value != nullptr && std::strcmp( value, "1" ) == 0;
     }();
     return enabled;
 }
@@ -194,7 +195,7 @@ void draw_controls_window()
     ImGui::Text( "标签：%s（切换 %d 次）", k_tab_names[g_tab_index], g_tab_switch_count );
     // PR-2A AIM-2 development preview: real backpack plus inventory move.
     if( ImGui::Button( "打开新版 AIM（开发预览）" ) ) {
-        ui2::aim::toggle();
+        ui2::shell::open( ui2::shell::panel::aim );
     }
     ImGui::TextDisabled( "关掉组件后可用这里恢复。" );
     ImGui::End();
@@ -210,10 +211,20 @@ void reset()
     g_main_open = true;
     g_second_open = true;
     g_controls_open = true;
+    // Every overlay open starts at the shell, not inside the last business
+    // window. The player can still go straight to AIM with the game action.
+    ui2::aim::set_open( false );
+    ui2::gear::set_open( false );
+    ui2::craft::set_open( false );
+    ui2::messages::set_open( false );
+    ui2::zone::set_open( false );
 }
 
 void draw()
 {
+    // Platform layer first: it owns navigation and consumes Escape before the
+    // business windows draw their own frame.
+    shell::draw();
     if( demo_windows_enabled() ) {
         draw_controls_window();
         draw_main_window();

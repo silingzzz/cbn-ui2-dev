@@ -72,6 +72,11 @@ void toggle()
     g_open = !g_open;
 }
 
+void set_open( bool open )
+{
+    g_open = open;
+}
+
 auto take_map_select_request() -> bool
 {
     if( !g_map_select_request ) {

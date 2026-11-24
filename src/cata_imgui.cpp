@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <cstring>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -473,7 +474,11 @@ auto process_event( const SDL_Event &event ) -> bool
     switch( event.type ) {
         case SDL_EVENT_KEY_DOWN: {
             const size_t slot = key_slot( event.key.scancode );
-            const bool captured = g_open && ( io.WantCaptureKeyboard || io.WantTextInput );
+            // The UI 2.0 overlay is modal: while it is open, the game must not
+            // act on keys that ImGui did not route to a text field. This also
+            // keeps Space/Enter from leaking to the paused game when a
+            // checkbox or button has focus.
+            const bool captured = g_open;
             key_owner_table[slot] = captured ? KEY_OWNER_IMGUI : KEY_OWNER_GAME;
             if( trace_on() && captured ) {
                 ++g_trace.key_ui;
@@ -562,7 +567,12 @@ auto render( SDL_Renderer *renderer ) -> void
     }
     const bool drawn_open = g_open;
     if( g_open ) {
-        draw_prototype_window();
+        // Diagnostic prototype widgets are opt-in; the default overlay is the
+        // UI 2.0 shell plus its business windows.
+        const char *const prototype = SDL_getenv( "CBN_IMGUI_PROTOTYPE" );
+        if( prototype != nullptr && std::strcmp( prototype, "0" ) != 0 ) {
+            draw_prototype_window();
+        }
         // PR-1.5 component demo, kept out of the PR-1 diagnostic window.
         ui2::draw();
     }

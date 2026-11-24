@@ -12,6 +12,7 @@ namespace gear
 void draw();
 void toggle();
 bool is_open();
+void set_open( bool open );
 
 /// True when a click queued an item-use request that the game loop still owes.
 bool has_deferred_action();

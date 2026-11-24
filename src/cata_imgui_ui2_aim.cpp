@@ -17,6 +17,7 @@
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_messages.h"
+#include "cata_imgui_ui2_shell.h"
 #include "cata_imgui_ui2_zone.h"
 #include "inventory.h"
 #include "item.h"
@@ -264,6 +265,11 @@ void toggle()
     g_open = !g_open;
 }
 
+void set_open( bool open )
+{
+    g_open = open;
+}
+
 void draw()
 {
     if( !g_open ) {
@@ -318,7 +324,7 @@ void draw()
     const std::vector<std::size_t> visible = aim_visible_rows( snap, g_category, g_search );
     const auto &targets = aim_move_targets();
 
-    ImGui::SetNextWindowPos( ImVec2( 60.0f, 60.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowPos( ImVec2( 60.0f, 110.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 900.0f, 560.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "新版 AIM（开发预览）· 背包移动", &g_open ) ) {
         ImGui::End();
@@ -346,19 +352,19 @@ void draw()
 
     ImGui::SameLine();
     if( ImGui::Button( "装备/容器", ImVec2( 90.0f, 0.0f ) ) ) {
-        ui2::gear::toggle();
+        ui2::shell::open( ui2::shell::panel::gear );
     }
     ImGui::SameLine();
     if( ImGui::Button( "制作", ImVec2( 60.0f, 0.0f ) ) ) {
-        ui2::craft::toggle();
+        ui2::shell::open( ui2::shell::panel::craft );
     }
     ImGui::SameLine();
     if( ImGui::Button( "区域", ImVec2( 60.0f, 0.0f ) ) ) {
-        ui2::zone::toggle();
+        ui2::shell::open( ui2::shell::panel::zone );
     }
     ImGui::SameLine();
-    if( ImGui::Button( ui2::messages::is_open() ? "收起消息" : "消息", ImVec2( 80.0f, 0.0f ) ) ) {
-        ui2::messages::toggle();
+    if( ImGui::Button( "消息", ImVec2( 80.0f, 0.0f ) ) ) {
+        ui2::shell::open( ui2::shell::panel::messages );
     }
     ImGui::SameLine();
     if( ImGui::Button( g_ground_open ? "收起地面" : "地面物品", ImVec2( 80.0f, 0.0f ) ) ) {

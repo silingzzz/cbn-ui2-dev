@@ -12,6 +12,7 @@ namespace craft
 void draw();
 void toggle();
 bool is_open();
+void set_open( bool open );
 
 } // namespace craft
 } // namespace ui2
