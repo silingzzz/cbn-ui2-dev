@@ -7,6 +7,7 @@
 #    include "cata_utility.h"
 #    include "cata_imgui.h"
 #    include "cata_imgui_ui2_gear.h"
+#    include "cata_imgui_ui2_world.h"
 #    include "catacharset.h"
 #    include "color.h"
 #    include "color_loader.h"
@@ -3771,7 +3772,9 @@ static void CheckMessages()
     // An overlay button queued a game action (e.g. item "use"). Wake the game
     // input loop with one synthetic click; game::handle_action consumes the
     // request before looking at that click, so it cannot move or select.
-    if( ui2::gear::has_deferred_action() && last_input.type == input_event_t::error ) {
+    if( ( ui2::gear::has_deferred_action() || ui2::world::has_request() ||
+          ( ui2::world::is_open() && get_avatar().has_destination() ) ) &&
+        last_input.type == input_event_t::error ) {
         last_input = input_event( MOUSE_BUTTON_LEFT, input_event_t::mouse );
     }
     if( quit ) {

@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include "cata_imgui_ui2_map.h"
+#include "cata_imgui_ui2_world.h"
 
 #if defined( TILES )
 
@@ -40,6 +41,11 @@ void clear_hover()
 
 void draw()
 {
+    // The world inspector owns tile readout while it is open; two floating
+    // cards describing the same tile just fight for the same corner.
+    if( ui2::world::is_open() ) {
+        return;
+    }
     if( !g_hover || ImGui::GetIO().WantCaptureMouse ) {
         return;
     }

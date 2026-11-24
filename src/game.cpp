@@ -25,6 +25,7 @@
 #include "cata_utility.h"
 #include "cata_imgui.h"
 #include "cata_imgui_ui2_map.h"
+#include "cata_imgui_ui2_world.h"
 #include "catacharset.h"
 #include "catalua_bindings_coords_common.h"
 #include "catalua_hooks.h"
@@ -3538,10 +3539,26 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
 #if defined( TILES )
             if( mouse_pos ) {
                 ui2::mapview::set_hover( *mouse_pos );
+                ui2::world::set_hover( *mouse_pos );
             } else {
                 ui2::mapview::clear_hover();
+                ui2::world::clear_hover();
             }
-#endif
+            const bool world_inspect = ui2::world::is_open();
+            if( world_inspect ) {
+                // World inspect owns the map cursor. The old Mouse View panel
+                // must not open underneath it, or its continuous refresh looks
+                // like the map follows the pointer.
+                liveview_pos.reset();
+                liveview.hide();
+            } else if( mouse_pos && ( !liveview_pos || *mouse_pos != *liveview_pos ) ) {
+                liveview_pos = mouse_pos;
+                liveview.show( *liveview_pos );
+            } else if( !mouse_pos ) {
+                liveview_pos.reset();
+                liveview.hide();
+            }
+#else
             if( mouse_pos && ( !liveview_pos || *mouse_pos != *liveview_pos ) ) {
                 liveview_pos = mouse_pos;
                 liveview.show( *liveview_pos );
@@ -3549,6 +3566,7 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
                 liveview_pos.reset();
                 liveview.hide();
             }
+#endif
             {
                 ZoneScopedN( "handle_mouseview_redraw" );
                 ui_manager::redraw();
@@ -5086,6 +5104,12 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking, const bo
 {
     ZoneScopedN( "draw_ter" );
     ter_view_p = center;
+
+#if defined( TILES )
+    // The world inspector keeps a tile selected/hovered across frames; queue
+    // that highlight before the map renderer consumes its per-frame overrides.
+    ui2::world::highlight_tile();
+#endif
 
     m.draw( w_terrain, center );
 

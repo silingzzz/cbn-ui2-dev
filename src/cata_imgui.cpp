@@ -20,6 +20,7 @@
 #include "cata_imgui_ui2_aim.h"
 #include "cata_imgui_ui2_interaction.h"
 #include "cata_imgui_ui2_style.h"
+#include "cata_imgui_ui2_world.h"
 #include "debug.h"
 #include "filesystem.h"
 #include "options.h"
@@ -32,6 +33,10 @@ namespace
 
 bool g_initialized = false;
 bool g_open = false;
+// World inspect is the only non-modal surface: the map remains clickable while
+// the platform shell is visible. Every other panel keeps the old full-modal
+// mouse gate.
+bool g_mouse_passthrough = false;
 // Set when the overlay stops showing so the host does one last repaint --
 // otherwise the last presented frame keeps the window on screen forever.
 bool g_redraw_pending = false;
@@ -255,6 +260,54 @@ auto load_cjk_font() -> void
     DebugLog( DL::Warn, DC::Main ) << "ImGui prototype: no CJK font found, using built-in font";
 }
 
+// Geometry-based hit test used only in the non-modal world-inspect mode. It
+// deliberately does not use io.WantCaptureMouse: that flag describes the last
+// frame, and a one-frame lag is exactly what leaked mouse motion into the
+// legacy Mouse View before. Window rectangles are stable enough for routing an
+// SDL event before the next NewFrame.
+auto pointer_over_interactive_window( const ImVec2 &mouse ) -> bool;
+
+auto pointer_over_interactive_window() -> bool
+{
+    return pointer_over_interactive_window( ImGui::GetIO().MousePos );
+}
+
+auto pointer_over_interactive_window( const ImVec2 &mouse ) -> bool
+{
+    if( GImGui == nullptr ) {
+        return true;
+    }
+    ImGuiContext &g = *GImGui;
+    if( ui2::world::is_open() && ui2::world::mouse_over_panel( mouse.x, mouse.y ) ) {
+        // The world panel is a normal ImGui window, but it is intentionally not
+        // the active window while the map is being inspected. Use the stable
+        // panel rectangle instead of relying on ImGui's active-window stack.
+        return true;
+    }
+    if( g.MovingWindow != nullptr && g.MovingWindow->Active && !g.MovingWindow->Hidden ) {
+        return true;
+    }
+    if( g.ActiveId != 0 ) {
+        return true;
+    }
+    if( ImGui::IsPopupOpen( "", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel ) ) {
+        return true;
+    }
+    for( ImGuiWindow *window : g.Windows ) {
+        if( window == nullptr || !window->WasActive || window->Hidden ) {
+            continue;
+        }
+        // Hover cards and tooltips are intentionally pass-through.
+        if( ( window->Flags & ImGuiWindowFlags_NoInputs ) != 0 ) {
+            continue;
+        }
+        if( window->Rect().Contains( mouse ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 auto draw_prototype_window() -> void
 {
     ImGui::SetNextWindowSize( ImVec2( 420.0f, 260.0f ), ImGuiCond_FirstUseEver );
@@ -316,6 +369,7 @@ void toggle()
     } else {
         SDL_StopTextInput( g_window );
         g_redraw_pending = true;
+        g_mouse_passthrough = false;
         // A focused text widget would otherwise keep eating keystrokes after the
         // overlay is gone; the input manager has no other way to drop that focus.
         g_clear_text_focus = true;
@@ -388,6 +442,7 @@ void shutdown()
     ImGui::DestroyContext();
     g_initialized = false;
     g_open = false;
+    g_mouse_passthrough = false;
     g_legacy_popup_depth = 0;
     g_legacy_restore_overlay = false;
 }
@@ -410,6 +465,7 @@ auto process_event( const SDL_Event &event ) -> bool
     // disabled the coordinates already match, so the event is forwarded as-is.
     SDL_Event converted{};
     const SDL_Event *to_feed = &event;
+    ImVec2 event_mouse = ImGui::GetIO().MousePos;
     const bool is_mouse = event.type == SDL_EVENT_MOUSE_MOTION ||
                           event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                           event.type == SDL_EVENT_MOUSE_BUTTON_UP ||
@@ -419,7 +475,14 @@ auto process_event( const SDL_Event &event ) -> bool
     // *and* under a non-100% display scale, where SDL reports window coords
     // scaled relative to the render output (observed 1.25x at 125% DPI).
     // SDL_RenderCoordinatesFromWindow is the supported conversion for both.
-    if( is_mouse && g_renderer != nullptr ) {
+    int window_w = 0;
+    int window_h = 0;
+    int pixel_w = 0;
+    int pixel_h = 0;
+    SDL_GetWindowSize( g_window, &window_w, &window_h );
+    SDL_GetWindowSizeInPixels( g_window, &pixel_w, &pixel_h );
+    const bool coordinates_differ = window_w != pixel_w || window_h != pixel_h;
+    if( is_mouse && g_renderer != nullptr && coordinates_differ ) {
         {
             float wx = 0.0f;
             float wy = 0.0f;
@@ -459,10 +522,29 @@ auto process_event( const SDL_Event &event ) -> bool
                     converted.button.y = ry;
                 }
                 to_feed = &converted;
+                event_mouse = ImVec2( rx, ry );
             }
         }
     }
 
+    if( is_mouse ) {
+        if( to_feed->type == SDL_EVENT_MOUSE_MOTION ) {
+            event_mouse = ImVec2( to_feed->motion.x, to_feed->motion.y );
+        } else if( to_feed->type == SDL_EVENT_MOUSE_WHEEL ) {
+            event_mouse = ImVec2( to_feed->wheel.mouse_x, to_feed->wheel.mouse_y );
+        } else {
+            event_mouse = ImVec2( to_feed->button.x, to_feed->button.y );
+        }
+    }
+    if( is_mouse && ( event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                      event.type == SDL_EVENT_MOUSE_BUTTON_UP ) ) {
+        // Some injection paths (and fast synthetic clicks) deliver the button
+        // without a preceding motion event. ImGui hit-tests with io.MousePos,
+        // which would otherwise still point at the previous frame's location.
+        // Queue the position before the button so the backend sees both in order.
+        ImGui::GetIO().AddMousePosEvent( event_mouse.x, event_mouse.y );
+        ImGui::GetIO().MousePos = event_mouse;
+    }
     ImGui_ImplSDL3_ProcessEvent( to_feed );
     if( trace_on() ) {
         trace_maybe_log();
@@ -528,6 +610,9 @@ auto process_event( const SDL_Event &event ) -> bool
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
         case SDL_EVENT_MOUSE_WHEEL:
+            if( g_mouse_passthrough ) {
+                return pointer_over_interactive_window( event_mouse );
+            }
             return io.WantCaptureMouse;
         default:
             return false;
@@ -668,14 +753,23 @@ auto take_redraw_request() -> bool
 
 auto want_capture_mouse() -> bool
 {
+    if( !g_open || !g_initialized ) {
+        return false;
+    }
+    if( g_mouse_passthrough ) {
+        return pointer_over_interactive_window();
+    }
     // The platform shell is modal while visible. Mouse motion must not reach
     // the game just because the pointer crossed a spot where ImGui's
     // WantCaptureMouse had not caught up yet: one leaked MOUSE_MOVE starts
     // game::handle_mouseview() and its old Mouse View panel, which looks like
     // the map/list scrolling by itself as the cursor moves.
-    // World inspect will need an explicit non-modal mode later; do not weaken
-    // this global gate for it.
-    return g_open && g_initialized;
+    return true;
+}
+
+void set_mouse_passthrough( bool enabled )
+{
+    g_mouse_passthrough = enabled;
 }
 
 auto want_capture_keyboard() -> bool

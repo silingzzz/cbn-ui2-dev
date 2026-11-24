@@ -12,6 +12,7 @@
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_messages.h"
 #include "cata_imgui_ui2_zone.h"
+#include "cata_imgui_ui2_world.h"
 #include "game.h"
 
 namespace ui2
@@ -35,6 +36,8 @@ auto panel_name( panel p ) -> const char *
             return "消息";
         case panel::zone:
             return "区域";
+        case panel::world:
+            return "世界";
         case panel::none:
         default:
             return "无";
@@ -59,6 +62,9 @@ void set_open( panel p, bool open )
             break;
         case panel::zone:
             ui2::zone::set_open( open );
+            break;
+        case panel::world:
+            ui2::world::set_open( open );
             break;
         case panel::none:
         default:
@@ -131,6 +137,9 @@ auto active() -> panel
     if( ui2::zone::is_open() ) {
         return panel::zone;
     }
+    if( ui2::world::is_open() ) {
+        return panel::world;
+    }
     return panel::none;
 }
 
@@ -141,7 +150,8 @@ auto any_open() -> bool
 
 void close_all()
 {
-    for( panel p : { panel::aim, panel::gear, panel::craft, panel::messages, panel::zone } ) {
+    for( panel p : { panel::aim, panel::gear, panel::craft, panel::messages, panel::zone,
+                     panel::world } ) {
         set_open( p, false );
     }
     ImGui::ClearActiveID();
@@ -162,7 +172,10 @@ void draw()
     const bool popup_open = ImGui::IsPopupOpen( "", ImGuiPopupFlags_AnyPopupId |
                             ImGuiPopupFlags_AnyPopupLevel );
     if( ImGui::IsKeyPressed( ImGuiKey_Escape ) && !popup_open && !ImGui::IsAnyItemActive() ) {
-        if( any_open() ) {
+        if( ui2::world::is_open() && ui2::world::handle_escape() ) {
+            // The world panel consumes the first Escape to clear selection or
+            // the last result; the next Escape closes the panel itself.
+        } else if( any_open() ) {
             close_all();
         } else if( cata_imgui::is_open() ) {
             cata_imgui::toggle();
@@ -192,6 +205,8 @@ void draw()
         draw_panel_button( "消息", panel::messages );
         ImGui::SameLine();
         draw_panel_button( "区域", panel::zone );
+        ImGui::SameLine();
+        draw_panel_button( "世界", panel::world );
         ImGui::SameLine();
         ImGui::TextDisabled( "│ 当前：%s", panel_name( active() ) );
 

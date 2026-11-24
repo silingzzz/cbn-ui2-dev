@@ -18,6 +18,7 @@ enum class panel {
     craft,
     messages,
     zone,
+    world,
 };
 
 /// Draw the always-available console while the ImGui overlay is open.

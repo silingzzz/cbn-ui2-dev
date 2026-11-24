@@ -17,6 +17,7 @@
 #include <imgui.h>
 
 #include "cata_imgui_ui2_map.h"
+#include "cata_imgui_ui2_world.h"
 
 namespace
 {
@@ -218,6 +219,7 @@ void reset()
     ui2::craft::set_open( false );
     ui2::messages::set_open( false );
     ui2::zone::set_open( false );
+    ui2::world::set_open( false );
 }
 
 void draw()
@@ -246,6 +248,8 @@ void draw()
     ui2::zone::draw();
     // Message history viewer with a mouse-driven list and detail pane.
     ui2::messages::draw();
+    // World inspect: non-modal map selection plus a small action panel.
+    ui2::world::draw();
     // PR-6A: hover card for the tile under the game cursor.
     ui2::mapview::draw();
 }

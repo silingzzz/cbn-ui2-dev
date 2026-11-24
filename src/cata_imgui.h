@@ -40,6 +40,11 @@ auto take_redraw_request() -> bool;
 /// call before init and after shutdown.
 auto want_capture_mouse() -> bool;
 
+/// World inspect is the one intentional non-modal mode: the map keeps mouse
+/// input while the platform shell stays visible. Outside that mode the overlay
+/// remains fully modal. Set by ui2::world::set_open().
+void set_mouse_passthrough( bool enabled );
+
 /// True when ImGui holds keyboard focus. Query only: the game's own keyboard
 /// handling is deliberately not changed by this prototype.
 auto want_capture_keyboard() -> bool;

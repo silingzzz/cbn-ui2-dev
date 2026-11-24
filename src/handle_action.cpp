@@ -4,6 +4,7 @@
 #include "cata_imgui_ui2_aim.h"
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_zone.h"
+#include "cata_imgui_ui2_world.h"
 #include "advanced_inv.h"
 #include "animation.h"
 #include "armor_layers.h"
@@ -695,17 +696,9 @@ inline static void pldrive( point_rel_veh d )
     return pldrive( tripoint_rel_veh( d, 0 ) );
 }
 
-static void open()
+static void open_at( const tripoint_bub_ms &openp )
 {
     player &u = g->u;
-    const std::optional<tripoint_bub_ms> openp_ = choose_adjacent_highlight( _( "Open where?" ),
-            pgettext( "no door, gate, curtain, etc.", "There is nothing that can be opened nearby." ),
-            ACTION_OPEN, false );
-
-    if( !openp_ ) {
-        return;
-    }
-    const auto openp = *openp_;
     map &here = get_map();
 
     if( const optional_vpart_position vp = here.veh_at( openp ) ) {
@@ -742,12 +735,29 @@ static void open()
     }
 }
 
+static void open()
+{
+    const std::optional<tripoint_bub_ms> openp_ = choose_adjacent_highlight( _( "Open where?" ),
+            pgettext( "no door, gate, curtain, etc.", "There is nothing that can be opened nearby." ),
+            ACTION_OPEN, false );
+
+    if( !openp_ ) {
+        return;
+    }
+    open_at( *openp_ );
+}
+
+static void close_at( const tripoint_bub_ms &pnt )
+{
+    doors::close_door( get_map(), g->u, pnt );
+}
+
 static void close()
 {
     if( const std::optional<tripoint_bub_ms> pnt = choose_adjacent_highlight( _( "Close where?" ),
             pgettext( "no door, gate, etc.", "There is nothing that can be closed nearby." ),
             ACTION_CLOSE, false ) ) {
-        doors::close_door( get_map(), g->u, *pnt );
+        close_at( *pnt );
     }
 }
 
@@ -1945,6 +1955,79 @@ bool game::handle_action()
         // the synthetic input event that woke this loop.
         return false;
     }
+    ui2::world::request world_request;
+    if( ui2::world::take_request( world_request ) ) {
+        const avatar &you = get_avatar();
+        const tripoint_bub_ms target = world_request.target;
+        const bool seen = you.sees( target );
+        const bool near = square_dist( target.xy(), you.bub_pos().xy() ) <= 1;
+        switch( world_request.kind ) {
+            case ui2::world::action_kind::examine:
+                if( !seen ) {
+                    ui2::world::set_result( "看不到这个地块", true );
+                } else if( !near ) {
+                    ui2::world::set_result( "太远，查看需站在相邻格", true );
+                } else {
+                    cata_imgui::legacy_popup_scope scope;
+                    g->examine( target );
+                    ui2::world::set_result( "已进入查看流程", false );
+                }
+                break;
+            case ui2::world::action_kind::pickup:
+                if( !seen ) {
+                    ui2::world::set_result( "看不到这个地块", true );
+                } else if( !near ) {
+                    ui2::world::set_result( "太远，拾取需站在相邻格", true );
+                } else if( get_map().i_at( target ).empty() ) {
+                    ui2::world::set_result( "这里没有可拾取的物品", true );
+                } else {
+                    cata_imgui::legacy_popup_scope scope;
+                    g->pickup( target );
+                    ui2::world::set_result( "已进入拾取流程", false );
+                }
+                break;
+            case ui2::world::action_kind::open:
+                if( !seen || !near ) {
+                    ui2::world::set_result( "太远，开门需站在相邻格", true );
+                } else {
+                    open_at( target );
+                    ui2::world::set_result( "已尝试开门", false );
+                }
+                break;
+            case ui2::world::action_kind::close:
+                if( !seen || !near ) {
+                    ui2::world::set_result( "太远，关门需站在相邻格", true );
+                } else {
+                    close_at( target );
+                    ui2::world::set_result( "已尝试关门", false );
+                }
+                break;
+            case ui2::world::action_kind::walk_to:
+                if( target == you.bub_pos() ) {
+                    ui2::world::set_result( "你已经站在这个地块上", true );
+                } else if( !get_map().passable( target ) ) {
+                    ui2::world::set_result( "走不到：目标格不可通行（家具/墙体阻挡）", true );
+                } else {
+                    std::vector<tripoint_bub_ms> route = get_map().route(
+                            you.bub_pos(), target, you.get_legacy_pathfinding_settings(),
+                            you.get_legacy_path_avoid() );
+                    if( route.empty() || route.back() != target ) {
+                        // The last tile can be a counter, a closed door or other
+                        // impassable furniture. Do not hand that route to
+                        // auto-move just to have it cancel one step later.
+                        ui2::world::set_result( "走不到：目标格不可达，最后一段被阻挡", true );
+                    } else {
+                        g->u.set_destination( route );
+                        ui2::world::set_result( "已开始走向目标地块", false );
+                    }
+                }
+                break;
+            case ui2::world::action_kind::none:
+            default:
+                break;
+        }
+        return false;
+    }
 #endif
     std::string action;
     input_context ctxt;
@@ -1958,6 +2041,11 @@ bool game::handle_action()
             act = u.get_next_auto_move_direction();
             if( act == ACTION_NULL ) {
                 add_msg( m_info, _( "Auto-move canceled" ) );
+#if defined( TILES )
+                if( ui2::world::is_open() ) {
+                    ui2::world::set_result( "走不到：自动移动在下一步取消", true );
+                }
+#endif
                 u.clear_destination();
                 return false;
             }
@@ -2061,6 +2149,22 @@ bool game::handle_action()
                 return false;
             }
             mouse_target = mouse_pos;
+
+#if defined( TILES )
+            if( ui2::world::is_open() ) {
+                // In world inspect, the first click selects, the second click on
+                // the same tile runs the default action, and right click opens
+                // the action menu. Do not run auto-move or the legacy click map.
+                if( act == ACTION_SELECT ) {
+                    ui2::world::on_left_click( *mouse_target );
+                    return false;
+                }
+                if( act == ACTION_SEC_SELECT ) {
+                    ui2::world::on_right_click( *mouse_target );
+                    return false;
+                }
+            }
+#endif
 
             if( act == ACTION_SELECT ) {
                 if( !avatar_knows_travel_destination( u, *mouse_target ) &&
