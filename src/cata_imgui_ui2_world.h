@@ -49,6 +49,11 @@ void on_right_click( const tripoint_bub_ms &pos );
 /// key only cleared the selection/result.
 auto handle_escape() -> bool;
 
+/// Handles world-panel keyboard shortcuts at the SDL event layer. The game
+/// also polls the keyboard, so consuming the event here is what keeps E/G/O/C/W
+/// from falling through to the legacy bindings.
+auto handle_key( int sdl_key, bool shift ) -> bool;
+
 /// Draw the inspection panel.  Called from ui2::draw().
 void draw();
 

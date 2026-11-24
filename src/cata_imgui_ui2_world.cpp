@@ -1,4 +1,5 @@
 #include <imgui.h>
+#include <SDL3/SDL_keycode.h>
 
 #include "cata_imgui_ui2_world.h"
 
@@ -368,9 +369,63 @@ auto handle_escape() -> bool
     return false;
 }
 
-void draw()
+auto handle_key( int sdl_key, bool shift ) -> bool
 {
     if( !g_open ) {
+        return false;
+    }
+    switch( sdl_key ) {
+        case SDLK_UP:
+            move_selection( 0, -1, 0 );
+            return true;
+        case SDLK_DOWN:
+            move_selection( 0, 1, 0 );
+            return true;
+        case SDLK_LEFT:
+            move_selection( -1, 0, 0 );
+            return true;
+        case SDLK_RIGHT:
+            move_selection( 1, 0, 0 );
+            return true;
+        case SDLK_COMMA:
+            if( shift ) {
+                move_selection( 0, 0, -1 );
+                return true;
+            }
+            return false;
+        case SDLK_PERIOD:
+            if( shift ) {
+                move_selection( 0, 0, 1 );
+                return true;
+            }
+            return false;
+        case 'e':
+        case 'E':
+            queue( action_kind::examine );
+            return true;
+        case 'g':
+        case 'G':
+            queue( action_kind::pickup );
+            return true;
+        case 'o':
+        case 'O':
+            queue( action_kind::open );
+            return true;
+        case 'c':
+        case 'C':
+            queue( action_kind::close );
+            return true;
+        case 'w':
+        case 'W':
+            queue( action_kind::walk_to );
+            return true;
+        default:
+            return false;
+    }
+}
+
+void draw()
+{    if( !g_open ) {
         return;
     }
     const ImGuiIO &io = ImGui::GetIO();

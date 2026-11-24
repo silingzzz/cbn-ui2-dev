@@ -77,6 +77,7 @@
 #include "perk.h"
 #include "player.h"
 #include "player_activity.h"
+#include "pickup.h"
 #include "popup.h"
 #include "profile.h"
 #include "ranged.h"
@@ -237,6 +238,10 @@ auto grab_creature( avatar &you, Creature &target ) -> void
 }
 
 } // namespace
+
+// A world-panel pickup keeps the legacy overlay hidden until its assigned
+// pickup activity has fully finished.
+static bool g_world_pickup_hold = false;
 
 static const bionic_id bio_remote( "bio_remote" );
 
@@ -1946,6 +1951,13 @@ bool game::handle_action()
 {
     ZoneScopedN( "handle_action" );
 #if defined( TILES )
+    // A world-panel pickup assigns a pickup activity. Keep the legacy overlay
+    // hidden until that activity finishes, otherwise the UI2 shell would come
+    // back on top of the old pickup / stash menu.
+    if( g_world_pickup_hold && !get_avatar().activity ) {
+        cata_imgui::end_legacy_popup();
+        g_world_pickup_hold = false;
+    }
     if( ui2::zone::take_map_select_request() ) {
         ui2::zone::run_map_select_flow();
         return false;
@@ -1981,8 +1993,16 @@ bool game::handle_action()
                 } else if( get_map().i_at( target ).empty() ) {
                     ui2::world::set_result( "这里没有可拾取的物品", true );
                 } else {
-                    cata_imgui::legacy_popup_scope scope;
-                    g->pickup( target );
+                    // Bypass game::pickup(), which delegates the new pickup menu
+                    // to a deferred activity and would restore the UI2 shell
+                    // before the legacy menu has closed.
+                    cata_imgui::begin_legacy_popup();
+                    pickup::pick_up( target, 0 );
+                    if( get_avatar().activity ) {
+                        g_world_pickup_hold = true;
+                    } else {
+                        cata_imgui::end_legacy_popup();
+                    }
                     ui2::world::set_result( "已进入拾取流程", false );
                 }
                 break;

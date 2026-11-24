@@ -572,6 +572,17 @@ auto process_event( const SDL_Event &event ) -> bool
     switch( event.type ) {
         case SDL_EVENT_KEY_DOWN: {
             const size_t slot = key_slot( event.key.scancode );
+            // World-panel shortcuts must be consumed at the event layer: the
+            // game also polls SDL keyboard state, so ImGui alone cannot stop
+            // E/G/O/C/W from falling through to the legacy bindings.
+            if( ui2::world::handle_key( static_cast<int>( event.key.key ),
+                                        ( event.key.mod & SDL_KMOD_SHIFT ) != 0 ) ) {
+                key_owner_table[slot] = KEY_OWNER_IMGUI;
+                if( trace_on() ) {
+                    ++g_trace.key_ui;
+                }
+                return true;
+            }
             // The UI 2.0 overlay is modal: while it is open, the game must not
             // act on keys that ImGui did not route to a text field. This also
             // keeps Space/Enter from leaking to the paused game when a
