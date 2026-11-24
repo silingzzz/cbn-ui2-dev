@@ -1195,7 +1195,9 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
         case player_display_tab::num_tabs:
             abort();
     }
-    if( line_beg >= line_end || line < line_beg ) {
+    if( line_end == 0 ) {
+        line = 0;
+    } else if( line_beg >= line_end || line < line_beg ) {
         line = line_beg;
     } else if( line > line_end - 1 ) {
         line = line_end - 1;
@@ -1328,6 +1330,12 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
         return false;
     }
 
+    if( line_end == 0 && ( action == "UP" || action == "DOWN" ||
+                           action == "SCROLL_UP" || action == "SCROLL_DOWN" ) ) {
+        // Empty tab: there is no row to move to, and line_end - 1 would
+        // underflow line_end (unsigned) and index skillslist out of bounds.
+        action.clear();
+    }
     if( action == "SCROLL_UP" ) {
         action = line > line_beg ? "UP" : "";
     } else if( action == "SCROLL_DOWN" ) {
