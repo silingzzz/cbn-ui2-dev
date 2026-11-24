@@ -439,6 +439,11 @@ void veh_interact::do_main_loop() {
                                       cell.x < getbegx(w_details) + getmaxx(w_details) &&
                                       cell.y >= getbegy(w_details) &&
                                       cell.y < getbegy(w_details) + getmaxy(w_details);
+            const bool over_list = getmaxx(w_list) > 0 &&
+                                   cell.x >= getbegx(w_list) &&
+                                   cell.x < getbegx(w_list) + getmaxx(w_list) &&
+                                   cell.y >= getbegy(w_list) &&
+                                   cell.y < getbegy(w_list) + getmaxy(w_list);
             const int step = action == "SCROLL_UP" ? -1 : 1;
             if (over_parts) {
                 if (step < 0) {
@@ -446,8 +451,13 @@ void veh_interact::do_main_loop() {
                 } else if (cpart >= 0 && parts_list_offset < static_cast<int>(parts_here.size()) - 1) {
                     parts_list_offset++;
                 }
-            } else if (over_details) {
+            } else if (over_list) {
+                // The overview list lives in w_list; w_details is the selected
+                // part's detail pane and must not drive list scrolling.
                 move_overview_line(step);
+            } else if (over_details) {
+                // No scrollable detail pane yet; keep the event from moving the
+                // overview list when the pointer is over the detail window.
             }
             continue;
         }
@@ -1856,7 +1866,17 @@ void veh_interact::overview(const overview_enable_t& enable, const overview_acti
                 move_overview_line(-1);
                 if (--overview_pos < 0) { overview_pos = overview_opts.size() - 1; }
             } while (!overview_opts[overview_pos].hotkey);
+        } else if (input == "SCROLL_UP") {
+            do {
+                move_overview_line(-1);
+                if (--overview_pos < 0) { overview_pos = overview_opts.size() - 1; }
+            } while (!overview_opts[overview_pos].hotkey);
         } else if (input == "DOWN") {
+            do {
+                move_overview_line(1);
+                if (++overview_pos >= static_cast<int>(overview_opts.size())) { overview_pos = 0; }
+            } while (!overview_opts[overview_pos].hotkey);
+        } else if (input == "SCROLL_DOWN") {
             do {
                 move_overview_line(1);
                 if (++overview_pos >= static_cast<int>(overview_opts.size())) { overview_pos = 0; }
