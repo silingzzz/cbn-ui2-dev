@@ -10,6 +10,7 @@
 #include "color.h"
 #include "coordinates.h"
 #include "cursesdef.h"
+#include "cursesport.h"
 #include "debug.h"
 #include "drop_token.h"
 #include "enums.h"
@@ -729,6 +730,8 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
         ctxt.register_action( "PREV_TAB", to_translation( "Previous page" ) );
         ctxt.register_action( "SCROLL_UP" );
         ctxt.register_action( "SCROLL_DOWN" );
+        ctxt.register_action( "MOUSE_MOVE" );
+        ctxt.register_action( "SELECT" );
         ctxt.register_action( "CONFIRM" );
         ctxt.register_action( "SELECT_ALL" );
         ctxt.register_action( "QUIT", to_translation( "Cancel" ) );
@@ -931,6 +934,21 @@ auto pick_up_from_items( const std::vector<item_stack::iterator> &here, const in
                 iScrollPos--;
             } else if( action == "SCROLL_DOWN" ) {
                 iScrollPos++;
+            } else if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+                const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+                const point local( cell.x - getbegx( w_pickup ),
+                                   cell.y - getbegy( w_pickup ) );
+                if( local.x >= 0 && local.x < pickupW &&
+                    local.y >= 1 && local.y <= maxitems ) {
+                    const int row = start + local.y - 1;
+                    if( row >= 0 && row < static_cast<int>( matches.size() ) ) {
+                        selected = row;
+                        if( action == "SELECT" ) {
+                            idx = row;
+                            iScrollPos = 0;
+                        }
+                    }
+                }
             } else if( action == "PREV_TAB" ) {
                 if( start > 0 ) {
                     start -= maxitems;
