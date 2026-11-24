@@ -50,6 +50,7 @@ struct pending_action {
 pending_action g_pending;
 std::string g_notice;
 bool g_notice_error = false;
+item *g_confirm_drop = nullptr;
 
 struct gear_drag_payload {
     item *subject = nullptr;
@@ -219,67 +220,79 @@ void draw_item_tree( item &it, item *parent )
     }
 }
 
-void take_off_to_inventory( Character &you, item &it )
+bool take_off_to_inventory( Character &you, item &it )
 {
     if( !you.can_takeoff( it ).success() ) {
         you.add_msg_if_player( m_info, "现在不能卸下 %s。", plain_name( it ) );
-        return;
+        return false;
     }
     std::vector<detached_ptr<item>> detached;
-    if( you.takeoff( it, &detached ) ) {
-        for( detached_ptr<item> &piece : detached ) {
-            if( piece ) {
-                you.i_add( std::move( piece ) );
+    if( !you.takeoff( it, &detached ) ) {
+        return false;
+    }
+    bool dropped = false;
+    for( detached_ptr<item> &piece : detached ) {
+        if( piece ) {
+            if( you.i_add_or_drop( std::move( piece ) ) ) {
+                dropped = true;
             }
         }
     }
+    if( dropped ) {
+        g_notice = "已卸下 " + plain_name( it ) + "（背包超重/超体积，已放在地面）";
+    }
+    return true;
 }
 
-void move_child( Character &you, item &child, item &dest )
+bool move_child( Character &you, item &child, item &dest )
 {
     if( !can_store_items( dest ) ) {
         you.add_msg_if_player( m_info, "%s 不是容器。", plain_name( dest ) );
-        return;
+        return false;
     }
     if( child.parent_item() == &dest || contains_item( child, &dest ) ) {
         you.add_msg_if_player( m_info, "不能把物品移入自身或它自己的子容器。" );
-        return;
+        return false;
     }
     if( !can_accept( dest, child ) ) {
         you.add_msg_if_player( m_info, "%s 不能收纳 %s。", plain_name( dest ), plain_name( child ) );
-        return;
+        return false;
     }
     if( dest.contents.item_size_modifier() + child.volume() > dest.get_total_capacity() ) {
         you.add_msg_if_player( m_info, "%s 装不下 %s。", plain_name( dest ), plain_name( child ) );
-        return;
+        return false;
     }
     const std::string child_name = plain_name( child );
     const std::string dest_name = plain_name( dest );
     detached_ptr<item> piece = child.detach();
     if( !piece ) {
-        return;
+        return false;
     }
-    const ret_val<bool> inserted = dest.contents.insert_item( std::move( piece ) );
-    if( !inserted.success() ) {
-        you.add_msg_if_player( m_warning, "移动到 %s 失败。", dest_name );
-        return;
-    }
+    // No failure path after this point: insert_item() always takes ownership.
+    dest.contents.insert_item( std::move( piece ) );
     you.add_msg_if_player( m_info, "已把 %s 移入 %s。", child_name, dest_name );
+    return true;
 }
 
-void take_child_to_inventory( Character &you, item & /*parent*/, item &child )
+bool take_child_to_inventory( Character &you, item & /*parent*/, item &child )
 {
     if( child.made_of( LIQUID ) ) {
         you.add_msg_if_player( m_info, "液体需要先倒入合适的容器，不能直接放入背包。" );
-        return;
+        return false;
     }
     const std::string child_name = plain_name( child );
     detached_ptr<item> piece = child.detach();
     if( !piece ) {
-        return;
+        return false;
     }
-    you.i_add_or_drop( std::move( piece ) );
-    you.add_msg_if_player( m_info, "已取出 %s。", child_name );
+    detached_ptr<item> left = you.i_add_or_drop( std::move( piece ) );
+    if( left ) {
+        you.add_msg_if_player( m_warning, "背包超重或超体积，已把 %s 放在地面。", child_name );
+        g_notice = "已取出 " + child_name + "（背包超重/超体积，已放在地面）";
+    } else {
+        you.add_msg_if_player( m_info, "已取出 %s。", child_name );
+    }
+    return true;
 }
 
 void apply_pending()
@@ -312,10 +325,16 @@ void apply_pending()
             g_selected_parent = nullptr;
             break;
         case pending_kind::takeoff:
-            take_off_to_inventory( you, it );
-            g_notice = "已卸下 " + name;
-            g_selected = nullptr;
-            g_selected_parent = nullptr;
+            if( take_off_to_inventory( you, it ) ) {
+                if( g_notice.empty() ) {
+                    g_notice = "已卸下 " + name;
+                }
+                g_selected = nullptr;
+                g_selected_parent = nullptr;
+            } else {
+                g_notice = "不能卸下 " + name;
+                g_notice_error = true;
+            }
             break;
         case pending_kind::unwield: {
             detached_ptr<item> piece = you.remove_primary_weapon();
@@ -355,10 +374,16 @@ void apply_pending()
         }
         case pending_kind::move_child:
             if( g_pending.dest != nullptr ) {
-                move_child( you, it, *g_pending.dest );
-                g_notice = "已移入 " + plain_name( *g_pending.dest );
-                g_selected = g_pending.subject;
-                g_selected_parent = g_pending.dest;
+                if( move_child( you, it, *g_pending.dest ) ) {
+                    if( g_notice.empty() ) {
+                        g_notice = "已移入 " + plain_name( *g_pending.dest );
+                    }
+                    g_selected = g_pending.subject;
+                    g_selected_parent = g_pending.dest;
+                } else {
+                    g_notice = "移入失败";
+                    g_notice_error = true;
+                }
             } else {
                 g_notice = "没有可用的目标容器";
                 g_notice_error = true;
@@ -366,10 +391,16 @@ void apply_pending()
             break;
         case pending_kind::take_child:
             if( g_pending.from != nullptr ) {
-                take_child_to_inventory( you, *g_pending.from, it );
-                g_notice = "已取出 " + name;
-                g_selected = nullptr;
-                g_selected_parent = nullptr;
+                if( take_child_to_inventory( you, *g_pending.from, it ) ) {
+                    if( g_notice.empty() ) {
+                        g_notice = "已取出 " + name;
+                    }
+                    g_selected = nullptr;
+                    g_selected_parent = nullptr;
+                } else {
+                    g_notice = "取出失败";
+                    g_notice_error = true;
+                }
             } else {
                 g_notice = "原容器已失效";
                 g_notice_error = true;
@@ -477,6 +508,9 @@ void draw()
     if( g_selected == nullptr && !rows.empty() ) {
         g_selected = rows.front().ptr;
         g_selected_parent = nullptr;
+    }
+    if( g_confirm_drop != nullptr && g_selected != g_confirm_drop ) {
+        g_confirm_drop = nullptr;
     }
 
     ImGui::SetNextWindowPos( ImVec2( 980.0f, 110.0f ), ImGuiCond_FirstUseEver );
@@ -632,8 +666,23 @@ void draw()
                     if( slot == "背包" ) {
                         draw_move_combo();
                         ImGui::Spacing();
-                        if( ImGui::Button( "丢下到地面", ImVec2( 130.0f, 0.0f ) ) ) {
-                            g_pending = { pending_kind::drop, &it, nullptr, nullptr };
+                        if( g_confirm_drop == &it ) {
+                            ImGui::TextColored( ImVec4( 0.95f, 0.45f, 0.35f, 1.0f ),
+                                                "危险丢弃：%s 已收藏或正在使用。", plain_name( it ).c_str() );
+                            if( ImGui::Button( "确认丢下", ImVec2( 100.0f, 0.0f ) ) ) {
+                                g_pending = { pending_kind::drop, &it, nullptr, nullptr };
+                                g_confirm_drop = nullptr;
+                            }
+                            ImGui::SameLine();
+                            if( ImGui::Button( "取消", ImVec2( 80.0f, 0.0f ) ) ) {
+                                g_confirm_drop = nullptr;
+                            }
+                        } else if( ImGui::Button( "丢下到地面", ImVec2( 130.0f, 0.0f ) ) ) {
+                            if( it.is_favorite || it.is_active() ) {
+                                g_confirm_drop = &it;
+                            } else {
+                                g_pending = { pending_kind::drop, &it, nullptr, nullptr };
+                            }
                         }
                         if( ImGui::IsItemHovered() ) {
                             ImGui::SetTooltip( "在当前位置丢下；面板保持打开，由游戏原有掉落动作结算。" );
