@@ -158,10 +158,12 @@ void queue_default()
     const avatar &you = get_avatar();
     const tripoint_bub_ms p = *g_selected;
     const bool near = adjacent( you, p );
-    if( near && can_open_at( you, p ) ) {
-        queue( ui2::world::action_kind::open );
-    } else if( near && can_close_at( you, p ) ) {
+    // Prefer closing an already-open door/window/curtain over opening the
+    // next layer; both links can be present on an open window.
+    if( near && can_close_at( you, p ) ) {
         queue( ui2::world::action_kind::close );
+    } else if( near && can_open_at( you, p ) ) {
+        queue( ui2::world::action_kind::open );
     } else if( has_items_at( p ) && near ) {
         queue( ui2::world::action_kind::pickup );
     } else if( near ) {
