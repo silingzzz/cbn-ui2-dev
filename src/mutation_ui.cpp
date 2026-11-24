@@ -585,9 +585,12 @@ detail::mutations_ui_result detail::show_mutations_ui_internal( Character &who )
                 } else {
                     continue;
                 }
-                examine_id = GetTrait( active, passive, cursor, tab_mode );
+                // The two columns have unrelated index spaces: reset the cursor
+                // before GetTrait(), otherwise a row from the longer column can
+                // index past the newly selected column.
                 scroll_position = 0;
                 cursor = 0;
+                examine_id = GetTrait( active, passive, cursor, tab_mode );
             } else if( action == "CONFIRM" ) {
                 trait_id mut_id;
                 if( tab_mode == mutation_tab_mode::active ) {
