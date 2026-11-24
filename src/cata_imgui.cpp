@@ -45,6 +45,10 @@ SDL_Renderer *g_renderer = nullptr;
 // are running. The overlay yields for their lifetime and is restored after.
 int g_legacy_popup_depth = 0;
 bool g_legacy_restore_overlay = false;
+// After a legacy modal loop returns, the same key/mouse event that dismissed it
+// is still in the queue. Skip one overlay input frame so Esc/Enter cannot fall
+// through and close the shell that just came back.
+int g_resume_guard_frames = 0;
 
 // Prototype widgets only; real UI work starts in PR-2.
 char g_text_buffer[128] = "你好, Cataclysm";
@@ -574,7 +578,18 @@ void end_legacy_popup()
         g_legacy_restore_overlay = false;
         g_open = true;
         g_redraw_pending = true;
+        g_resume_guard_frames = 1;
     }
+}
+
+legacy_popup_scope::legacy_popup_scope()
+{
+    begin_legacy_popup();
+}
+
+legacy_popup_scope::~legacy_popup_scope()
+{
+    end_legacy_popup();
 }
 
 auto render( SDL_Renderer *renderer ) -> void
@@ -611,7 +626,10 @@ auto render( SDL_Renderer *renderer ) -> void
         g_clear_text_focus = false;
     }
     const bool drawn_open = g_open;
-    if( g_open ) {
+    if( g_resume_guard_frames > 0 ) {
+        --g_resume_guard_frames;
+        g_redraw_pending = true;
+    } else if( g_open ) {
         // Diagnostic prototype widgets are opt-in; the default overlay is the
         // UI 2.0 shell plus its business windows.
         const char *const prototype = SDL_getenv( "CBN_IMGUI_PROTOTYPE" );
@@ -656,8 +674,12 @@ auto want_capture_mouse() -> bool
 
 auto want_capture_keyboard() -> bool
 {
-    return g_open && g_initialized && ImGui::GetCurrentContext() != nullptr &&
-           ImGui::GetIO().WantCaptureKeyboard;
+    // The shell is a modal layer while it is visible. ImGui reports
+    // WantCaptureKeyboard=false when only buttons exist (no text field or
+    // active widget), which let gameplay keys such as Space leak through and
+    // trigger actions behind the overlay. While open, the platform owns the
+    // keyboard; legacy popup scopes hide the overlay first.
+    return g_open && g_initialized;
 }
 
 void trace_game_mouse( int kind )

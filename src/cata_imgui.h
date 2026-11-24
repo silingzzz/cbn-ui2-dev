@@ -57,6 +57,14 @@ void clear_widget_focus();
 void begin_legacy_popup();
 void end_legacy_popup();
 
+/// RAII helper for legacy modal loops (direction queries, look-around).
+struct legacy_popup_scope {
+    legacy_popup_scope();
+    ~legacy_popup_scope();
+    legacy_popup_scope( const legacy_popup_scope & ) = delete;
+    legacy_popup_scope &operator=( const legacy_popup_scope & ) = delete;
+};
+
 /// Diagnostic counter (only active with CBN_IMGUI_TRACE set): count presented frames.
 void trace_present();
 

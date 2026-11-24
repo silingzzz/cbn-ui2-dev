@@ -1,6 +1,7 @@
 #include "action.h"
 
 #include "avatar.h"
+#include "cata_imgui.h"
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
@@ -1282,6 +1283,9 @@ std::optional<tripoint_rel_ms> choose_direction( const std::string &message,
     }
 
     static_popup popup;
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     //~ %s: "Close where?" "Pry where?" etc.
     popup.message( _( "%s (Direction button)" ), message ).on_top( true );
 

@@ -23,6 +23,7 @@
 #include "calendar.h"
 #include "cata_cartesian_product.h"
 #include "cata_utility.h"
+#include "cata_imgui.h"
 #include "cata_imgui_ui2_map.h"
 #include "catacharset.h"
 #include "catalua_bindings_coords_common.h"
@@ -10071,6 +10072,9 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
                                       const tripoint_bub_ms &start_point, bool has_first_point, bool select_zone, bool peeking,
                                       bool is_moving_zone, const tripoint_bub_ms &end_point, look_around_mode mode )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     bVMonsterLookFire = false;
     temp_exit_fullscreen();
 
