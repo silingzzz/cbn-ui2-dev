@@ -1301,7 +1301,7 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
                         // after the list has been scrolled.
                         const size_t height = static_cast<size_t>( std::max( 0,
                                               getmaxy( pane.content ) - 1 ) );
-                        const size_t half_y = height > 0 ? ( height - 1 ) / 2 : 0;
+                        const size_t half_y = height > 0 ? height / 2 : 0;
                         size_t min = 0;
                         if( line > half_y ) {
                             if( line >= skillslist.size() - half_y ) {
