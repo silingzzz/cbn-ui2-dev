@@ -21,6 +21,9 @@ void dialogue_window::resize_dialogue( ui_adaptor &ui )
     ui.position_from_window( d_win );
     curr_page = 0;
     draw_cache.clear();
+    // A resize invalidates the screen-space response rectangles; clear them
+    // before the first redraw so a mouse event cannot use stale coordinates.
+    response_rects.clear();
     for( size_t idx = 0; idx < history.size(); idx++ ) {
         cache_msg( history[idx], idx );
     }
