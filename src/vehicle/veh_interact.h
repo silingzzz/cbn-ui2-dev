@@ -83,6 +83,8 @@ private:
     int cpart = -1;
     // Screen rectangles of the part rows drawn last frame, for mouse input.
     std::vector<std::pair<inclusive_rectangle<point>, int>> part_rects;
+    // Screen rectangles of the top action bar, mapped to input actions.
+    std::vector<std::pair<inclusive_rectangle<point>, std::string>> mode_hits;
     int page_size;
     int fuel_index = 0; /** Starting index of where to start printing fuels from */
     // height of the stats window

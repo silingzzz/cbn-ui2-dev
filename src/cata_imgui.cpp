@@ -595,12 +595,14 @@ auto take_redraw_request() -> bool
 
 auto want_capture_mouse() -> bool
 {
-    return g_initialized && ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+    return g_open && g_initialized && ImGui::GetCurrentContext() != nullptr &&
+           ImGui::GetIO().WantCaptureMouse;
 }
 
 auto want_capture_keyboard() -> bool
 {
-    return g_initialized && ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
+    return g_open && g_initialized && ImGui::GetCurrentContext() != nullptr &&
+           ImGui::GetIO().WantCaptureKeyboard;
 }
 
 void trace_game_mouse( int kind )

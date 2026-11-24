@@ -6,6 +6,7 @@
 #include "avatar_functions.h"
 #include "clothing_link.h"
 #include "crafting.h"
+#include "cursesport.h"
 #include "game_inventory.h"
 #include "input.h"
 #include "item.h"
@@ -61,6 +62,8 @@ bool run(
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
+    ctxt.register_action( "MOUSE_MOVE" );
+    ctxt.register_action( "SELECT" );
 
     int info_area_scroll_pos = 0;
     constexpr int info_area_scroll_step = 3;
@@ -353,6 +356,28 @@ bool run(
         ui_manager::redraw();
 
         const std::string &action = ctxt.handle_input();
+
+        if( action == "MOUSE_MOVE" || action == "SELECT" ) {
+            const point cell = mouse_pixel_to_cell( ctxt.get_raw_input().mouse_pos );
+            for( size_t i = 0; i < action_list.entries.size(); ++i ) {
+                const auto &entry = action_list.entries[i];
+                if( !entry.drawn_rect || !entry.drawn_rect->contains( cell ) ) {
+                    continue;
+                }
+                if( entry.enabled ) {
+                    selected_action = static_cast<int>( i );
+                    action_list.set_selected( selected_action );
+                    if( action == "SELECT" ) {
+                        ret_val = actions[i].on_select();
+                        exit = true;
+                    }
+                }
+                break;
+            }
+            if( action == "MOUSE_MOVE" || exit ) {
+                continue;
+            }
+        }
 
         if( action == "QUIT" || action == "LEFT" ) {
             ret_val = false;

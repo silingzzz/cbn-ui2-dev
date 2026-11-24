@@ -313,7 +313,7 @@ query_popup::result query_popup::query_once()
                 const auto x1 = getbegx( win ) + border_width + btn.pos.x;
                 const auto x2 = x1 + utf8_width( btn.text, true ) - 1;
                 const auto y = getbegy( win ) + border_width + btn.pos.y;
-                if( cell.x < x1 || cell.x > x2 || cell.y != y ) {
+                if( cell.x < x1 - 1 || cell.x > x2 + 1 || cell.y < y - 1 || cell.y > y + 1 ) {
                     continue;
                 }
                 if( res.action == "MOUSE_MOVE" ) {
@@ -321,7 +321,10 @@ query_popup::result query_popup::query_once()
                         cur = ind;
                         ui_manager::redraw();
                     }
-                } else if( options[ind].filter( res.evt ) ) {
+                } else {
+                    // A pointer click already identifies the visible option;
+                    // keyboard-only filters (e.g. case sensitivity) must not
+                    // reject it.
                     cur = ind;
                     res.wait_input = false;
                     res.action = options[ind].action;

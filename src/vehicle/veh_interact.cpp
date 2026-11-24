@@ -461,6 +461,14 @@ void veh_interact::do_main_loop() {
                     break;
                 }
             }
+            if (action == "SELECT") {
+                for (const auto& hit : mode_hits) {
+                    if (hit.first.contains(cell)) {
+                        action = hit.second;
+                        break;
+                    }
+                }
+            }
             // Clicking the vehicle grid moves the cursor there. This must not run on
             // hover: the view recenters on the cursor, so a moving cursor would drag
             // the whole grid around under the pointer.
@@ -2841,6 +2849,7 @@ static auto veh_act_desc(
  */
 void veh_interact::display_mode() {
     werase(w_mode);
+    mode_hits.clear();
 
     if (title.has_value()) {
         nc_color title_col = c_light_gray;
@@ -2872,12 +2881,21 @@ void veh_interact::display_mode() {
         for (size_t i = 0; i < action_cnt; i++) {
             pos[i + 1] = pos[i] + utf8_width(actions[i], true);
         }
+        const std::array<std::string, action_cnt> action_ids = {{
+            "INSTALL", "REPAIR", "MEND", "REFILL", "REMOVE", "SIPHON",
+            "UNLOAD", "ASSIGN_CREW", "RENAME", "RELABEL", "CHANGE_SHAPE", "QUIT",
+        }};
         const int space = std::max<int>(getmaxx(w_mode) - pos.back(), action_cnt + 1);
         for (size_t i = 0; i < action_cnt; i++) {
+            const int x = pos[i] + space * (i + 1) / (action_cnt + 1);
             nc_color dummy = c_white;
-            print_colored_text(
-                w_mode, point(pos[i] + space * (i + 1) / (action_cnt + 1), 0), dummy, c_white,
-                actions[i]);
+            print_colored_text(w_mode, point(x, 0), dummy, c_white, actions[i]);
+            mode_hits.emplace_back(
+                inclusive_rectangle<point>(
+                    point(getbegx(w_mode) + x, getbegy(w_mode)),
+                    point(getbegx(w_mode) + x + utf8_width(actions[i], true) - 1,
+                          getbegy(w_mode) + 1)),
+                action_ids[i]);
         }
     }
     wnoutrefresh(w_mode);

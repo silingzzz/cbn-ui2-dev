@@ -754,9 +754,9 @@ void inventory_column::on_input( const inventory_input &input )
         return; // ignore
     }
 
-    if( input.action == "DOWN" ) {
+    if( input.action == "DOWN" || input.action == "SCROLL_DOWN" ) {
         move_selection( scroll_direction::FORWARD );
-    } else if( input.action == "UP" ) {
+    } else if( input.action == "UP" || input.action == "SCROLL_UP" ) {
         move_selection( scroll_direction::BACKWARD );
     } else if( input.action == "PAGE_DOWN" ) {
         move_selection_page( scroll_direction::FORWARD );
@@ -1983,6 +1983,8 @@ inventory_selector::inventory_selector( player &u, const inventory_selector_pres
 {
     ctxt.register_action( "DOWN", to_translation( "Next item" ) );
     ctxt.register_action( "UP", to_translation( "Previous item" ) );
+    ctxt.register_action( "SCROLL_DOWN" );
+    ctxt.register_action( "SCROLL_UP" );
     ctxt.register_action( "PAGE_DOWN", to_translation( "Page down" ) );
     ctxt.register_action( "PAGE_UP", to_translation( "Page up" ) );
     ctxt.register_action( "RIGHT", to_translation( "Next column" ) );
