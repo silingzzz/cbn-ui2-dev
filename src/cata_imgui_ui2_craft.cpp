@@ -36,6 +36,9 @@ bool g_pending_start = false;
 const recipe *g_pending_recipe = nullptr;
 int g_pending_batch = 1;
 std::string g_notice;
+// Tracks the ACT_CRAFT transition so completion gets its own notice.
+bool g_was_crafting = false;
+bool g_suppress_completion_notice = false;
 
 struct queue_entry {
     const recipe *rec = nullptr;
@@ -160,6 +163,7 @@ bool take_deferred_action()
             you.invalidate_crafting_inventory();
             g_activity_total_moves = 0;
             g_queue_blocked = !g_queue.empty();
+            g_suppress_completion_notice = true;
             g_notice = g_queue.empty() ? "已取消当前制作。" : "已取消当前制作，队列暂停。";
         } else {
             g_notice = "当前没有可取消的制作。";
@@ -206,12 +210,29 @@ void draw()
 
     const std::vector<const recipe *> rows = build_rows();
     Character &you = get_avatar();
-    if( std::find( rows.begin(), rows.end(), g_selected ) == rows.end() ) {
+    // Do not re-anchor the selection every frame: starting a craft deducts
+    // components, which can make the selected recipe disappear from the
+    // craftable set mid-activity.  Reset only when the filter actually changes.
+    static std::string g_last_query;
+    static bool g_last_only_craftable = false;
+    if( g_last_query != g_search || g_last_only_craftable != g_only_craftable ) {
+        g_last_query = g_search;
+        g_last_only_craftable = g_only_craftable;
         g_selected = rows.empty() ? nullptr : rows.front();
+    } else if( g_selected == nullptr && !rows.empty() ) {
+        g_selected = rows.front();
     }
+    const bool now_crafting = you.activity && you.activity->id().str() == "ACT_CRAFT";
+    if( g_was_crafting && !now_crafting ) {
+        if( !g_suppress_completion_notice ) {
+            g_notice = "制作完成，产物已入背包。";
+        }
+        g_suppress_completion_notice = false;
+    }
+    g_was_crafting = now_crafting;
 
     ImGui::SetNextWindowPos( ImVec2( 60.0f, 110.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 585.0f ), ImGuiCond_FirstUseEver );
+    ImGui::SetNextWindowSize( ImVec2( 1180.0f, 640.0f ), ImGuiCond_FirstUseEver );
     if( !ImGui::Begin( "制作", &g_open ) ) {
         ImGui::End();
         return;
@@ -237,6 +258,20 @@ void draw()
     }
     if( g_selected == nullptr ) {
         ImGui::EndDisabled();
+    }
+    ImGui::NewLine();
+    if( now_crafting ) {
+        if( ImGui::Button( "取消当前制作（丢弃已预扣组件）", ImVec2( 340.0f, 0.0f ) ) ) {
+            g_pending_cancel = true;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled( "取消会丢弃已预扣的组件。" );
+    } else if( g_queue_blocked && !g_queue.empty() ) {
+        if( ImGui::Button( "继续队列", ImVec2( 160.0f, 0.0f ) ) ) {
+            g_queue_blocked = false;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled( "队列已暂停；继续后会尝试下一项。" );
     }
     ImGui::Separator();
 
@@ -320,13 +355,6 @@ void draw()
                 ImGui::TextDisabled( "当前没有进行中的活动" );
             }
             ImGui::Separator();
-            if( is_crafting ) {
-                if( ImGui::Button( "取消当前制作（丢弃已预扣组件）", ImVec2( 340.0f, 0.0f ) ) ) {
-                    g_pending_cancel = true;
-                }
-                ImGui::SameLine();
-                ImGui::TextDisabled( "取消会丢弃已预扣的组件。" );
-            }
             ImGui::SetNextItemWidth( 100.0f );
             ImGui::InputInt( "##craft_batch", &g_batch, 1, 10 );
             g_batch = std::max( 1, std::min( g_batch, 50 ) );
@@ -354,7 +382,7 @@ void draw()
                 ImGui::TextDisabled( "（材料或工具不足，已禁用）" );
             }
             if( is_crafting ) {
-                ImGui::TextDisabled( "制作进行中；进度与剩余步数见上，可点上方按钮取消。" );
+                ImGui::TextDisabled( "制作进行中；进度与剩余步数见上，可用顶部按钮取消。" );
             } else {
                 ImGui::TextDisabled( "空闲时加入队列会自动开始下一项。" );
             }
