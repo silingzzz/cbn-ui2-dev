@@ -23,6 +23,10 @@
 #include "string_utils.h"
 #include "ui_manager.h"
 
+#if defined(TILES)
+#include "cata_imgui.h"
+#endif
+
 #if defined(__ANDROID__)
 #include <SDL3/SDL.h>
 
@@ -1070,6 +1074,13 @@ void uilist::query( bool loop, int timeout )
         return;
     }
     ret = UILIST_WAIT_INPUT;
+
+#if defined(TILES)
+    // Legacy uilist popups (craft component selection, item selection, etc.)
+    // must own the mouse/keyboard while visible. Hide the UI2 shell for the
+    // duration of the modal loop and restore it afterwards.
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
 
     input_context ctxt = create_main_input_context();
 
