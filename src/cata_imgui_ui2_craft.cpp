@@ -42,6 +42,10 @@ bool g_suppress_completion_notice = false;
 // Recipe started from this window, used to tell whether the result fit in the
 // backpack or was placed on the ground because of volume/weight.
 const recipe *g_last_craft_recipe = nullptr;
+// Result quantity before the craft. Comparing before/after avoids treating a
+// pre-existing stack as the newly crafted product.
+int g_last_craft_result_count = 0;
+int g_last_craft_result_charges = 0;
 
 struct queue_entry {
     const recipe *rec = nullptr;
@@ -115,6 +119,8 @@ void start_craft( const recipe &rec, int batch )
 {
     Character &you = get_avatar();
     g_last_craft_recipe = &rec;
+    g_last_craft_result_count = you.amount_of( rec.result(), false );
+    g_last_craft_result_charges = you.charges_of( rec.result() );
     g_activity_total_moves = rec.batch_time( batch, 1.0f, 0 );
     you.make_craft( rec.ident(), batch, you.bub_pos() );
     if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
@@ -229,17 +235,24 @@ void draw()
     const bool now_crafting = you.activity && you.activity->id().str() == "ACT_CRAFT";
     if( g_was_crafting && !now_crafting ) {
         if( !g_suppress_completion_notice ) {
-            if( g_last_craft_recipe != nullptr &&
-                !you.has_item_with_id( g_last_craft_recipe->result() ) ) {
-                g_notice = "制作完成，背包已满，产物放在地面。";
-            } else if( g_last_craft_recipe != nullptr ) {
-                g_notice = "制作完成，产物已入背包。";
+            if( g_last_craft_recipe != nullptr ) {
+                const itype_id result = g_last_craft_recipe->result();
+                const int now_count = you.amount_of( result, false );
+                const int now_charges = you.charges_of( result );
+                if( now_count > g_last_craft_result_count ||
+                    now_charges > g_last_craft_result_charges ) {
+                    g_notice = "制作完成，产物已入背包。";
+                } else {
+                    g_notice = "制作完成，背包已满，产物放在地面。";
+                }
             } else {
                 g_notice = "制作完成。";
             }
         }
         g_suppress_completion_notice = false;
         g_last_craft_recipe = nullptr;
+        g_last_craft_result_count = 0;
+        g_last_craft_result_charges = 0;
     }
     g_was_crafting = now_crafting;
 
