@@ -2020,11 +2020,11 @@ bool game::handle_action()
                 } else {
                     const auto ter_before = get_map().ter( target );
                     const auto furn_before = get_map().furn( target );
-                    const bool vehicle_target = get_map().veh_at( target ).has_value();
+                    const int moves_before = g->u.moves;
                     open_at( target );
                     const bool changed = get_map().ter( target ) != ter_before ||
                                          get_map().furn( target ) != furn_before;
-                    const bool success = changed || vehicle_target;
+                    const bool success = changed || g->u.moves < moves_before;
                     ui2::world::set_result( success ? "已开门" :
                                             "未能开门，详见游戏消息", !success );
                 }
@@ -2035,11 +2035,11 @@ bool game::handle_action()
                 } else {
                     const auto ter_before = get_map().ter( target );
                     const auto furn_before = get_map().furn( target );
-                    const bool vehicle_target = get_map().veh_at( target ).has_value();
+                    const int moves_before = g->u.moves;
                     close_at( target );
                     const bool changed = get_map().ter( target ) != ter_before ||
                                          get_map().furn( target ) != furn_before;
-                    const bool success = changed || vehicle_target;
+                    const bool success = changed || g->u.moves < moves_before;
                     ui2::world::set_result( success ? "已关门" :
                                             "未能关门，详见游戏消息", !success );
                 }

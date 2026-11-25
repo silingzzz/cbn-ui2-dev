@@ -222,6 +222,7 @@ void reset_session()
     ui2::gear::reset_session();
     ui2::craft::reset_session();
     ui2::messages::reset_session();
+    ui2::world::reset_session();
 }
 
 void draw()

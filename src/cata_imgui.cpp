@@ -366,6 +366,7 @@ void toggle()
         SDL_StartTextInput( g_window );
         // Reopening the overlay must never leave the demo windows unreachable.
         ui2::reset();
+        g_mouse_passthrough = ui2::world::is_open();
     } else {
         SDL_StopTextInput( g_window );
         g_redraw_pending = true;
@@ -673,6 +674,7 @@ void end_legacy_popup()
     if( g_legacy_restore_overlay ) {
         g_legacy_restore_overlay = false;
         g_open = true;
+        g_mouse_passthrough = ui2::world::is_open();
         g_redraw_pending = true;
         g_resume_guard_frames = 1;
     }
