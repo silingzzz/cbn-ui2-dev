@@ -39,6 +39,9 @@ std::string g_notice;
 // Tracks the ACT_CRAFT transition so completion gets its own notice.
 bool g_was_crafting = false;
 bool g_suppress_completion_notice = false;
+// Recipe started from this window, used to tell whether the result fit in the
+// backpack or was placed on the ground because of volume/weight.
+const recipe *g_last_craft_recipe = nullptr;
 
 struct queue_entry {
     const recipe *rec = nullptr;
@@ -111,6 +114,7 @@ auto build_rows() -> std::vector<const recipe *>
 void start_craft( const recipe &rec, int batch )
 {
     Character &you = get_avatar();
+    g_last_craft_recipe = &rec;
     g_activity_total_moves = rec.batch_time( batch, 1.0f, 0 );
     you.make_craft( rec.ident(), batch, you.bub_pos() );
     if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
@@ -225,9 +229,17 @@ void draw()
     const bool now_crafting = you.activity && you.activity->id().str() == "ACT_CRAFT";
     if( g_was_crafting && !now_crafting ) {
         if( !g_suppress_completion_notice ) {
-            g_notice = "制作完成，产物已入背包。";
+            if( g_last_craft_recipe != nullptr &&
+                !you.has_item_with_id( g_last_craft_recipe->result() ) ) {
+                g_notice = "制作完成，背包已满，产物放在地面。";
+            } else if( g_last_craft_recipe != nullptr ) {
+                g_notice = "制作完成，产物已入背包。";
+            } else {
+                g_notice = "制作完成。";
+            }
         }
         g_suppress_completion_notice = false;
+        g_last_craft_recipe = nullptr;
     }
     g_was_crafting = now_crafting;
 
