@@ -19,6 +19,9 @@ bool has_deferred_action();
 /// Run one queued action from game::handle_action(); returns true if consumed.
 bool take_deferred_action();
 
+/// Clear selection, pending state and notices across saves/new games.
+void reset_session();
+
 } // namespace messages
 } // namespace ui2
 

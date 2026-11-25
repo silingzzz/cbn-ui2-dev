@@ -25,9 +25,6 @@ bool g_open = false;
 item *g_selected = nullptr;
 item *g_selected_parent = nullptr;
 
-/// Restore the gear window after the game's own item UI returns.
-bool g_reopen_after_use = false;
-
 enum class pending_kind {
     none,
     wield,
@@ -418,21 +415,18 @@ void apply_pending()
                 you.add_msg_if_player( m_info, "该物品已不在装备栏，取消使用。" );
                 g_notice = "该物品已不在装备栏";
                 g_notice_error = true;
-                g_reopen_after_use = false;
                 break;
             }
             // This function is now called from game::handle_action(), outside
-            // ImGui's draw callback. It is safe to let the game open its own UI.
+            // ImGui's draw callback. Yield the overlay via legacy_popup_scope so
+            // any sub-UI (Light where?, Drink anyway?, uilist) receives input and
+            // restores the gear panel with the 1-frame Escape guard on return.
             g_selected = nullptr;
             g_selected_parent = nullptr;
             g_notice = "正在使用 " + name;
-            avatar_action::use_item( you, &it );
-            if( g_reopen_after_use ) {
-                g_reopen_after_use = false;
-                g_open = true;
-                if( !cata_imgui::is_open() ) {
-                    cata_imgui::toggle();
-                }
+            {
+                cata_imgui::legacy_popup_scope imgui_gate;
+                avatar_action::use_item( you, &it );
             }
             break;
         }
@@ -496,6 +490,16 @@ bool take_deferred_action()
     }
     apply_pending();
     return true;
+}
+
+void reset_session()
+{
+    g_selected = nullptr;
+    g_selected_parent = nullptr;
+    g_pending = {};
+    g_notice.clear();
+    g_notice_error = false;
+    g_confirm_drop = nullptr;
 }
 
 void draw()
@@ -652,16 +656,9 @@ void draw()
                     ImGui::Spacing();
                     if( ImGui::Button( "使用", ImVec2( 90.0f, 0.0f ) ) ) {
                         g_pending = { pending_kind::use, &it, nullptr, nullptr };
-                        g_reopen_after_use = true;
-                        // The game action opens its own UI; hide the overlay so the
-                        // player sees that UI rather than this paused frame.
-                        g_open = false;
-                        if( cata_imgui::is_open() ) {
-                            cata_imgui::toggle();
-                        }
                     }
                     if( ImGui::IsItemHovered() ) {
-                        ImGui::SetTooltip( "关闭覆盖层后调用游戏原有的使用动作；会打开物品对应界面。" );
+                        ImGui::SetTooltip( "暂让覆盖层给游戏原有使用界面，完成后自动恢复。" );
                     }
                     if( slot == "背包" ) {
                         draw_move_combo();

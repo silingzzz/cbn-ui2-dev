@@ -82,6 +82,14 @@ bool take_deferred_action()
     return true;
 }
 
+void reset_session()
+{
+    g_selected = -1;
+    g_clear_pending = false;
+    g_confirm_clear = false;
+    g_notice.clear();
+}
+
 void draw()
 {
     if( !g_open ) {

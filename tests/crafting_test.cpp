@@ -7,6 +7,10 @@
 #include "avatar_functions.h"
 #include "bionics.h"
 #include "calendar.h"
+#if defined( TILES )
+#include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_craft.h"
+#endif
 #include "cata_utility.h"
 #include "catch/catch.hpp"
 #include "character_functions.h"
@@ -1281,3 +1285,41 @@ TEST_CASE("vehicle kitchen craft preserves frozen component rot", "[crafting][ro
 
     check_cooked_meat_is_fresh(result);
 }
+
+#if defined( TILES )
+TEST_CASE("ui2 craft deferred cancel and session reset", "[crafting][ui]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    std::vector<detached_ptr<item>> tools;
+    tools.push_back(item::spawn("rock"));
+    tools.push_back(item::spawn("rock"));
+    tools.push_back(item::spawn("2x4"));
+    tools.push_back(item::spawn("thread", calendar::turn, 100));
+
+    const recipe_id rid("primitive_hammer");
+    prep_craft(rid, tools, true);
+    set_time(midday);
+    avatar& you = get_avatar();
+    you.learn_recipe(&rid.obj());
+
+    you.make_craft(rid, 1);
+    REQUIRE(you.activity);
+    REQUIRE(you.activity->id() == activity_id("ACT_CRAFT"));
+
+    CHECK_FALSE(ui2::craft::has_deferred_action());
+    CHECK_FALSE(ui2::craft::take_deferred_cancel());
+
+    ui2::craft::request_cancel();
+    CHECK(ui2::craft::has_deferred_action());
+    CHECK(ui2::craft::take_deferred_cancel());
+    CHECK_FALSE(ui2::craft::has_deferred_action());
+    CHECK_FALSE(you.activity);
+
+    ui2::craft::request_cancel();
+    REQUIRE(ui2::craft::has_deferred_action());
+    ui2::reset_session();
+    CHECK_FALSE(ui2::craft::has_deferred_action());
+    CHECK_FALSE(ui2::craft::take_deferred_cancel());
+}
+#endif

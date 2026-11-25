@@ -24,7 +24,10 @@
 #include "cata_cartesian_product.h"
 #include "cata_utility.h"
 #include "cata_imgui.h"
+#include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_map.h"
+#include "cata_imgui_ui2_messages.h"
 #include "cata_imgui_ui2_world.h"
 #include "catacharset.h"
 #include "catalua_bindings_coords_common.h"
@@ -716,6 +719,9 @@ void game::setup( bool load_world_modfiles )
     next_activity_fixed_window_check_ = calendar::turn_zero;
     activity_fixed_window_force_normal_turn_ = false;
     saving_blocked_by_failed_load = false;
+#if defined( TILES )
+    ui2::reset_session();
+#endif
     uquit = QUIT_NO;   // We haven't quit the game
     bVMonsterLookFire = true;
 
@@ -1031,6 +1037,9 @@ bool game::start_game()
     seed = rng_bits();
     new_game = true;
     saving_blocked_by_failed_load = false;
+#if defined( TILES )
+    ui2::reset_session();
+#endif
     next_activity_fixed_window_check_ = calendar::turn_zero;
     activity_fixed_window_force_normal_turn_ = false;
     start_calendar();
@@ -2562,6 +2571,14 @@ void game::process_voluntary_act_interrupt()
         return;
     }
 
+#if defined( TILES )
+    if( ui2::craft::take_deferred_cancel() ) {
+        ui_manager::redraw();
+        refresh_display();
+        return;
+    }
+#endif
+
     bool has_activity = u.activity && !u.activity->complete();
     bool is_travelling = u.has_destination() && !u.omt_path.empty();
 
@@ -3501,6 +3518,13 @@ void game::handle_key_blocking_activity()
 {
     input_context ctxt = get_default_mode_input_context();
     const std::string action = ctxt.handle_input( 0 );
+#if defined( TILES )
+    if( ui2::craft::take_deferred_cancel() || ui2::messages::take_deferred_action() ) {
+        ui_manager::redraw();
+        refresh_display();
+        return;
+    }
+#endif
     bool refresh = true;
     if( action == "pause" || action == "main_menu" ) {
         if( u.activity->interruptable_with_kb ) {
@@ -4196,6 +4220,9 @@ bool game::load( const save_t &name )
     // Now load up the master game data; factions (and more?)
     load_master();
     u = avatar();
+#if defined( TILES )
+    ui2::reset_session();
+#endif
     u.recalc_hp();
     u.set_save_id( name.decoded_name() );
     u.name = name.decoded_name();

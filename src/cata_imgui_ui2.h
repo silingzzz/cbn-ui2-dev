@@ -15,6 +15,10 @@ void draw();
 /// closed demo window never becomes unreachable.
 void reset();
 
+/// Reset game-session state across UI 2.0 modules when starting or loading
+/// a world so raw item pointers and crafting/notice state do not leak across saves.
+void reset_session();
+
 } // namespace ui2
 
 #endif // TILES

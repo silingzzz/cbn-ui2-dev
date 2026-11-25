@@ -46,6 +46,8 @@ const recipe *g_last_craft_recipe = nullptr;
 // pre-existing stack as the newly crafted product.
 int g_last_craft_result_count = 0;
 int g_last_craft_result_charges = 0;
+std::string g_last_query;
+bool g_last_only_craftable = false;
 
 struct queue_entry {
     const recipe *rec = nullptr;
@@ -163,23 +165,64 @@ bool has_deferred_action()
     return g_open && !g_queue_blocked && !get_avatar().activity && !g_queue.empty();
 }
 
+void request_cancel()
+{
+    g_pending_cancel = true;
+}
+
+bool take_deferred_cancel()
+{
+    if( !g_pending_cancel ) {
+        return false;
+    }
+    g_pending_cancel = false;
+    Character &you = get_avatar();
+    if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
+        you.cancel_activity();
+        you.invalidate_crafting_inventory();
+        g_activity_total_moves = 0;
+        g_was_crafting = false;
+        g_suppress_completion_notice = false;
+        g_last_craft_recipe = nullptr;
+        g_last_craft_result_count = 0;
+        g_last_craft_result_charges = 0;
+        g_queue_blocked = !g_queue.empty();
+        g_notice = g_queue.empty() ? "已取消当前制作。" : "已取消当前制作，队列暂停。";
+    } else {
+        g_notice = "当前没有可取消的制作。";
+    }
+    return true;
+}
+
+void reset_session()
+{
+    g_selected = nullptr;
+    g_batch = 1;
+    g_only_craftable = false;
+    g_search[0] = '\0';
+    g_last_query.clear();
+    g_last_only_craftable = false;
+    g_activity_total_moves = 0;
+    g_pending_cancel = false;
+    g_pending_start = false;
+    g_pending_recipe = nullptr;
+    g_pending_batch = 1;
+    g_notice.clear();
+    g_was_crafting = false;
+    g_suppress_completion_notice = false;
+    g_last_craft_recipe = nullptr;
+    g_last_craft_result_count = 0;
+    g_last_craft_result_charges = 0;
+    g_queue.clear();
+    g_queue_blocked = false;
+}
+
 bool take_deferred_action()
 {
-    Character &you = get_avatar();
-    if( g_pending_cancel ) {
-        g_pending_cancel = false;
-        if( you.activity && you.activity->id().str() == "ACT_CRAFT" ) {
-            you.cancel_activity();
-            you.invalidate_crafting_inventory();
-            g_activity_total_moves = 0;
-            g_queue_blocked = !g_queue.empty();
-            g_suppress_completion_notice = true;
-            g_notice = g_queue.empty() ? "已取消当前制作。" : "已取消当前制作，队列暂停。";
-        } else {
-            g_notice = "当前没有可取消的制作。";
-        }
+    if( take_deferred_cancel() ) {
         return true;
     }
+    Character &you = get_avatar();
     if( g_pending_start ) {
         g_pending_start = false;
         const recipe *rec = g_pending_recipe;
@@ -223,8 +266,6 @@ void draw()
     // Do not re-anchor the selection every frame: starting a craft deducts
     // components, which can make the selected recipe disappear from the
     // craftable set mid-activity.  Reset only when the filter actually changes.
-    static std::string g_last_query;
-    static bool g_last_only_craftable = false;
     if( g_last_query != g_search || g_last_only_craftable != g_only_craftable ) {
         g_last_query = g_search;
         g_last_only_craftable = g_only_craftable;
@@ -270,10 +311,8 @@ void draw()
                          static_cast<int>( rows.size() ), g_batch );
     ImGui::SameLine();
     ImGui::Checkbox( "仅材料齐全", &g_only_craftable );
-    if( !g_notice.empty() ) {
-        ImGui::TextColored( ImVec4( 0.55f, 0.85f, 0.55f, 1.0f ), "%s", g_notice.c_str() );
-    }
-    ImGui::SameLine();
+    // Keep top action buttons on a fixed row above the notice text so notices
+    // appearing or changing length never shift the cancel button vertically.
     if( g_selected == nullptr ) {
         ImGui::BeginDisabled();
     }
@@ -284,19 +323,23 @@ void draw()
     if( g_selected == nullptr ) {
         ImGui::EndDisabled();
     }
-    ImGui::NewLine();
     if( now_crafting ) {
+        ImGui::SameLine();
         if( ImGui::Button( "取消当前制作（丢弃已预扣组件）", ImVec2( 340.0f, 0.0f ) ) ) {
-            g_pending_cancel = true;
+            request_cancel();
         }
         ImGui::SameLine();
         ImGui::TextDisabled( "取消会丢弃已预扣的组件。" );
     } else if( g_queue_blocked && !g_queue.empty() ) {
+        ImGui::SameLine();
         if( ImGui::Button( "继续队列", ImVec2( 160.0f, 0.0f ) ) ) {
             g_queue_blocked = false;
         }
         ImGui::SameLine();
         ImGui::TextDisabled( "队列已暂停；继续后会尝试下一项。" );
+    }
+    if( !g_notice.empty() ) {
+        ImGui::TextColored( ImVec4( 0.55f, 0.85f, 0.55f, 1.0f ), "%s", g_notice.c_str() );
     }
     ImGui::Separator();
 

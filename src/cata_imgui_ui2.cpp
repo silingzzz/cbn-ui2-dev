@@ -217,6 +217,13 @@ void reset()
     // reset the panel the player was working in.
 }
 
+void reset_session()
+{
+    ui2::gear::reset_session();
+    ui2::craft::reset_session();
+    ui2::messages::reset_session();
+}
+
 void draw()
 {
     // Platform layer first: it owns navigation and consumes Escape before the

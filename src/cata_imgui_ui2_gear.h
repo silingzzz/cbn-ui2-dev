@@ -22,6 +22,9 @@ bool has_deferred_action();
 /// Returns true when a request was consumed (even if it proved stale).
 bool take_deferred_action();
 
+/// Clear raw item pointers and session-scoped notices across saves/new games.
+void reset_session();
+
 } // namespace gear
 } // namespace ui2
 
