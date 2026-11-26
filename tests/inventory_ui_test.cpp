@@ -1,5 +1,8 @@
+#include <utility>
+
 #include "avatar.h"
 #include "catch/catch.hpp"
+#include "cata_imgui_ui2_gear.h"
 #include "inventory_ui.h"
 #include "item.h"
 #include "player_helpers.h"
@@ -259,3 +262,33 @@ TEST_CASE(
     // The column is now ordered by name deterministically.
     CHECK(entries.front()->any_item()->tname(1) < entries.back()->any_item()->tname(1));
 }
+
+#if defined( TILES )
+TEST_CASE( "ui2 gear inventory capacity predicate rejects overweight and overvolume",
+           "[ui][gear][inventory]" ) {
+    auto &you = get_avatar();
+    clear_character( you, false );
+    REQUIRE_FALSE( you.wear_item( item::spawn( "jeans" ), false ) );
+
+    auto lighter = item::spawn( "lighter" );
+    REQUIRE( lighter );
+    REQUIRE( you.can_pick_weight( *lighter, true ) );
+    REQUIRE( you.can_pick_volume( *lighter ) );
+    CHECK( ui2::gear::can_add_to_inventory( you, *lighter ) );
+
+    auto anvil = item::spawn( "anvil" );
+    REQUIRE( anvil );
+    REQUIRE( anvil->weight() > you.weight_capacity() );
+    you.i_add( std::move( anvil ) );
+    CHECK_FALSE( ui2::gear::can_add_to_inventory( you, *lighter ) );
+
+    clear_character( you, false );
+    REQUIRE_FALSE( you.wear_item( item::spawn( "jeans" ), false ) );
+    auto first_plank = item::spawn( "2x4" );
+    REQUIRE( first_plank );
+    you.i_add( std::move( first_plank ) );
+    auto second_plank = item::spawn( "2x4" );
+    REQUIRE( second_plank );
+    CHECK_FALSE( ui2::gear::can_add_to_inventory( you, *second_plank ) );
+}
+#endif

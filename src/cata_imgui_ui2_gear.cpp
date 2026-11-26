@@ -16,6 +16,7 @@
 #include "inventory.h"
 #include "item.h"
 #include "item_contents.h"
+#include "options.h"
 #include "units.h"
 
 namespace
@@ -230,7 +231,8 @@ bool take_off_to_inventory( Character &you, item &it )
     bool dropped = false;
     for( detached_ptr<item> &piece : detached ) {
         if( piece ) {
-            if( you.i_add_or_drop( std::move( piece ) ) ) {
+            const bool can_add = ui2::gear::can_add_to_inventory( you, *piece );
+            if( you.i_add_or_drop( std::move( piece ) ) || !can_add ) {
                 dropped = true;
             }
         }
@@ -282,8 +284,9 @@ bool take_child_to_inventory( Character &you, item & /*parent*/, item &child )
     if( !piece ) {
         return false;
     }
+    const bool can_add = ui2::gear::can_add_to_inventory( you, *piece );
     detached_ptr<item> left = you.i_add_or_drop( std::move( piece ) );
-    if( left ) {
+    if( left || !can_add ) {
         you.add_msg_if_player( m_warning, "背包超重或超体积，已把 %s 放在地面。", child_name );
         g_notice = "已取出 " + child_name + "（背包超重/超体积，已放在地面）";
     } else {
@@ -462,6 +465,15 @@ namespace ui2
 {
 namespace gear
 {
+
+bool can_add_to_inventory( const Character &you, const item &it )
+{
+    if( it.made_of( LIQUID ) ) {
+        return false;
+    }
+    return you.can_pick_weight( it, !get_option<bool>( "DANGEROUS_PICKUPS" ) ) &&
+           you.can_pick_volume( it );
+}
 
 bool is_open()
 {

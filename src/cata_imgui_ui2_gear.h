@@ -3,10 +3,17 @@
 
 #if defined( TILES )
 
+class Character;
+class item;
+
 namespace ui2
 {
 namespace gear
 {
+
+/// True when the character's inventory can accept the detached item without
+/// falling back to the map. Mirrors the checks used by i_add_or_drop().
+bool can_add_to_inventory( const Character &you, const item &it );
 
 /// Read-only worn/wielded equipment inspector, including nested containers.
 void draw();
