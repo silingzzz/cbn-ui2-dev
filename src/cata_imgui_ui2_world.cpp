@@ -146,6 +146,11 @@ void queue( ui2::world::action_kind kind )
     if( !g_selected ) {
         return;
     }
+    const std::string reason = action_reason( kind );
+    if( !reason.empty() ) {
+        ui2::world::set_result( reason, true );
+        return;
+    }
     g_request.kind = kind;
     g_request.target = *g_selected;
 }
@@ -157,6 +162,10 @@ void queue_default()
     }
     const avatar &you = get_avatar();
     const tripoint_bub_ms p = *g_selected;
+    if( !you.sees( p ) ) {
+        ui2::world::set_result( "看不到这个地块", true );
+        return;
+    }
     const bool near = adjacent( you, p );
     // Prefer closing an already-open door/window/curtain over opening the
     // next layer; both links can be present on an open window.
@@ -250,11 +259,11 @@ void draw_tile_contents( const tripoint_bub_ms &p )
     }
 }
 
-void draw_action_button( const char *label, ui2::world::action_kind kind )
+void draw_action_button( const char *label, ui2::world::action_kind kind, float width )
 {
     const std::string reason = action_reason( kind );
     ImGui::BeginDisabled( !reason.empty() );
-    if( ImGui::Button( label, ImVec2( 66.0f, 28.0f ) ) ) {
+    if( ImGui::Button( label, ImVec2( width, 28.0f ) ) ) {
         queue( kind );
     }
     ImGui::EndDisabled();
@@ -374,7 +383,9 @@ void on_right_click( const tripoint_bub_ms &pos )
 {
     g_selected = pos;
     g_result.clear();
-    g_context_pos = ImGui::GetIO().MousePos;
+    if( ImGui::GetCurrentContext() != nullptr ) {
+        g_context_pos = ImGui::GetIO().MousePos;
+    }
     g_context_requested = true;
 }
 
@@ -398,7 +409,12 @@ auto handle_escape() -> bool
 
 auto handle_key( int sdl_key, bool shift ) -> bool
 {
-    if( !g_open ) {
+    if( !g_open || g_context_open || g == nullptr || get_avatar().get_body().empty() ) {
+        return false;
+    }
+    if( ImGui::GetCurrentContext() != nullptr &&
+        ( ImGui::IsPopupOpen( "", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel ) ||
+          ImGui::IsAnyItemActive() ) ) {
         return false;
     }
     switch( sdl_key ) {
@@ -452,12 +468,13 @@ auto handle_key( int sdl_key, bool shift ) -> bool
 }
 
 void draw()
-{    if( !g_open ) {
+{
+    if( !g_open ) {
         return;
     }
     const ImGuiIO &io = ImGui::GetIO();
-    const float panel_width = 360.0f;
-    const float panel_height = std::min( 560.0f, io.DisplaySize.y - 150.0f );
+    const float panel_width = 430.0f;
+    const float panel_height = std::max( 180.0f, std::min( 560.0f, io.DisplaySize.y - 150.0f ) );
     // Place the panel over the map's upper-right quadrant, clear of both the
     // character sidebar and the cabinet row the player usually inspects.
     const float panel_x = std::max( 16.0f, io.DisplaySize.x - 1100.0f );
@@ -479,6 +496,12 @@ void draw()
     }
     ImGui::SameLine();
     ImGui::TextDisabled( "Esc 逐层退出" );
+    if( g == nullptr || get_avatar().get_body().empty() ) {
+        ImGui::Separator();
+        ImGui::TextDisabled( "请先载入或开始游戏后再使用世界查看。" );
+        ImGui::End();
+        return;
+    }
     ImGui::TextDisabled( "悬停高亮 · 单击选格 · 再次单击执行默认动作 · 右键动作菜单" );
     ImGui::Separator();
 
@@ -494,15 +517,15 @@ void draw()
         draw_tile_contents( *g_selected );
         ImGui::Separator();
         ImGui::TextDisabled( "可用动作（禁用项会显示原因）" );
-        draw_action_button( "查看", action_kind::examine );
+        draw_action_button( "查看", action_kind::examine, 62.0f );
         ImGui::SameLine();
-        draw_action_button( "拾取", action_kind::pickup );
+        draw_action_button( "拾取", action_kind::pickup, 62.0f );
         ImGui::SameLine();
-        draw_action_button( action_label( action_kind::open, *g_selected ), action_kind::open );
+        draw_action_button( action_label( action_kind::open, *g_selected ), action_kind::open, 84.0f );
         ImGui::SameLine();
-        draw_action_button( action_label( action_kind::close, *g_selected ), action_kind::close );
+        draw_action_button( action_label( action_kind::close, *g_selected ), action_kind::close, 84.0f );
         ImGui::SameLine();
-        draw_action_button( "走到", action_kind::walk_to );
+        draw_action_button( "走到", action_kind::walk_to, 62.0f );
 
         const avatar &you = get_avatar();
         const bool near = adjacent( you, *g_selected );
@@ -529,40 +552,15 @@ void draw()
 
     ImGui::End();
 
-    if( g_open && !ImGui::IsPopupOpen( "", ImGuiPopupFlags_AnyPopupId |
-                                       ImGuiPopupFlags_AnyPopupLevel ) &&
-        !ImGui::IsAnyItemActive() ) {
-        if( ImGui::IsKeyPressed( ImGuiKey_UpArrow ) ) {
-            move_selection( 0, -1, 0 );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_DownArrow ) ) {
-            move_selection( 0, 1, 0 );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_LeftArrow ) ) {
-            move_selection( -1, 0, 0 );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_RightArrow ) ) {
-            move_selection( 1, 0, 0 );
-        } else if( ImGui::GetIO().KeyShift && ImGui::IsKeyPressed( ImGuiKey_Comma ) ) {
-            move_selection( 0, 0, -1 );
-        } else if( ImGui::GetIO().KeyShift && ImGui::IsKeyPressed( ImGuiKey_Period ) ) {
-            move_selection( 0, 0, 1 );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_E ) ) {
-            queue( action_kind::examine );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_G ) ) {
-            queue( action_kind::pickup );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_O ) ) {
-            queue( action_kind::open );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_C ) ) {
-            queue( action_kind::close );
-        } else if( ImGui::IsKeyPressed( ImGuiKey_W ) ) {
-            queue( action_kind::walk_to );
-        }
-    }
-
+    // Keyboard shortcuts (arrows, Shift+< / >, E/G/O/C/W) are owned by
+    // handle_key() at the SDL event layer; do not re-poll ImGui::IsKeyPressed
+    // here or a single keypress fires twice.
     draw_context_menu();
 }
 
 void highlight_tile()
 {
-    if( !g_open ) {
+    if( !g_open || g == nullptr || get_avatar().get_body().empty() ) {
         return;
     }
     if( g_selected ) {
@@ -591,6 +589,17 @@ void set_result( const std::string &text, bool error )
 {
     g_result = text;
     g_result_error = error;
+}
+
+void reset_session()
+{
+    g_hover.reset();
+    g_selected.reset();
+    g_request = request{};
+    g_result.clear();
+    g_result_error = false;
+    g_context_requested = false;
+    g_context_open = false;
 }
 
 } // namespace world

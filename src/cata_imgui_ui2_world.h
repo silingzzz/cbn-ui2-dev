@@ -65,6 +65,9 @@ auto has_request() -> bool;
 auto take_request( request &out ) -> bool;
 void set_result( const std::string &text, bool error );
 
+/// Clear world-session coordinates, selection, and notices across saves.
+void reset_session();
+
 } // namespace world
 } // namespace ui2
 

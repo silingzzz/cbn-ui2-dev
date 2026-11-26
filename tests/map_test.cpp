@@ -7,6 +7,11 @@
 #include "avatar_action.h"
 #include "bodypart.h"
 #include "calendar.h"
+#if defined( TILES )
+#include <SDL3/SDL_keycode.h>
+#include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_world.h"
+#endif
 #include "cata_utility.h"
 #include "catch/catch.hpp"
 #include "computer.h"
@@ -1779,3 +1784,58 @@ TEST_CASE("door_closes_with_ordinary_furniture_overlay", "[map][door][regression
     CHECK(here.ter(p) == ter_id("t_door_c"));
     CHECK(here.furn(p) == furn_id("f_chair"));
 }
+
+#if defined( TILES )
+TEST_CASE("ui2_world_key_routing_validation_and_session_reset", "[ui][map][world]") {
+    clear_all_state();
+    ui2::reset_session();
+    const auto cleanup = on_out_of_scope([]() {
+        ui2::world::set_open(false);
+        ui2::reset_session();
+        clear_all_state();
+    });
+
+    avatar& you = get_avatar();
+    map& here = get_map();
+    const tripoint_bub_ms origin(60, 60, 0);
+    you.setpos(origin);
+    here.ter_set(origin + tripoint_rel_ms::east(), ter_id("t_floor"));
+    here.furn_set(origin + tripoint_rel_ms::east(), f_null);
+    here.ter_set(origin + tripoint_rel_ms::east() * 2, ter_id("t_floor"));
+    here.furn_set(origin + tripoint_rel_ms::east() * 2, f_null);
+    g->reset_light_level();
+    here.build_map_cache(0);
+
+    ui2::world::set_open(true);
+    REQUIRE(ui2::world::is_open());
+
+    // First left click selects the tile without queueing a default action.
+    const tripoint_bub_ms east_tile = origin + tripoint_rel_ms::east();
+    ui2::world::on_left_click(east_tile);
+    CHECK_FALSE(ui2::world::has_request());
+
+    // Invalid open shortcut on plain floor is rejected cleanly.
+    CHECK(ui2::world::handle_key('o', false));
+    CHECK_FALSE(ui2::world::has_request());
+
+    // Arrow key moves selection by a single step (to east*2), then W queues walk_to.
+    CHECK(ui2::world::handle_key(SDLK_RIGHT, false));
+    CHECK(ui2::world::handle_key('w', false));
+    ui2::world::request req;
+    REQUIRE(ui2::world::take_request(req));
+    CHECK(req.kind == ui2::world::action_kind::walk_to);
+    CHECK(req.target == origin + tripoint_rel_ms::east() * 2);
+
+    // Escape clears selection first; second Escape finds nothing left in world state.
+    CHECK(ui2::world::handle_escape());
+    CHECK_FALSE(ui2::world::handle_escape());
+
+    // Session reset clears selection and queued requests.
+    ui2::world::on_left_click(east_tile);
+    CHECK(ui2::world::handle_key('e', false));
+    REQUIRE(ui2::world::has_request());
+    ui2::reset_session();
+    CHECK_FALSE(ui2::world::has_request());
+    CHECK_FALSE(ui2::world::handle_escape());
+}
+#endif
