@@ -8299,6 +8299,9 @@ bool game::npc_menu( npc &who, const bool &force )
         [&]( auto & params ) { params["npc"] = &who; }, { .exit_early = true } ).get_or( "allowed", true );
         if( !allowed ) { return false; }
     }
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     cata::run_hooks( "on_npc_interaction", [&]( auto & params ) { params["npc"] = &who; } );
     enum choices : int {
         talk = 0,

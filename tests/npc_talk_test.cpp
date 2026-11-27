@@ -2,6 +2,7 @@
 #include "../src/overmap/overmapbuffer.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "catch/catch.hpp"
 #include "character.h"
 #include "character_id.h"
@@ -1056,3 +1057,57 @@ TEST_CASE("npc_talk_effect_change_first_topic", "[npc_talk]") {
     effect_2.apply(d);
     CHECK(talker_npc.chatbin.first_topic == "TALK_TEST_CHANGE_FIRST_TOPIC_1");
 }
+
+#if defined( TILES )
+TEST_CASE("ui2_npc_legacy_popup_scope_nesting_and_restore", "[ui][npc]") {
+    clear_all_state();
+    const bool was_open = cata_imgui::is_open();
+    if( !was_open ) {
+        cata_imgui::toggle();
+    }
+    REQUIRE( cata_imgui::is_open() );
+
+    // Hostile NPC talk_to_u returns early before entering dialogue_window and
+    // must not hide the UI2 overlay.
+    dialogue d;
+    npc &talker_npc = prep_test( d );
+    talker_npc.set_attitude( NPCATT_KILL );
+    talker_npc.talk_to_u();
+    CHECK( cata_imgui::is_open() );
+
+    // Nested scopes (npc_menu -> uilist / talk_to_u -> trade) keep the overlay
+    // hidden until the outermost scope exits.
+    {
+        cata_imgui::legacy_popup_scope npc_menu_gate;
+        CHECK_FALSE( cata_imgui::is_open() );
+        {
+            cata_imgui::legacy_popup_scope talk_gate;
+            CHECK_FALSE( cata_imgui::is_open() );
+            {
+                cata_imgui::legacy_popup_scope trade_gate;
+                CHECK_FALSE( cata_imgui::is_open() );
+            }
+            CHECK_FALSE( cata_imgui::is_open() );
+        }
+        CHECK_FALSE( cata_imgui::is_open() );
+    }
+    CHECK( cata_imgui::is_open() );
+
+    // When the overlay starts closed, nested scopes keep it closed on exit.
+    cata_imgui::toggle();
+    REQUIRE_FALSE( cata_imgui::is_open() );
+    {
+        cata_imgui::legacy_popup_scope outer_gate;
+        {
+            cata_imgui::legacy_popup_scope inner_gate;
+            CHECK_FALSE( cata_imgui::is_open() );
+        }
+        CHECK_FALSE( cata_imgui::is_open() );
+    }
+    CHECK_FALSE( cata_imgui::is_open() );
+
+    if( cata_imgui::is_open() != was_open ) {
+        cata_imgui::toggle();
+    }
+}
+#endif

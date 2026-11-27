@@ -1,6 +1,7 @@
 #include "npctrade.h"
 
 #include "avatar.h"
+#include "cata_imgui.h"
 #include "faction.h"
 #include "game.h"
 #include "item.h"
@@ -256,6 +257,9 @@ auto npc_trading::update_npc_owed( const trade_state &state, npc &np ) -> void
 // cost is positive when the player owes the NPC money for a service to be performed
 auto npc_trading::trade( npc &np, int cost, const std::string &deal ) -> bool
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     // Only allow actual shopkeepers to refresh their inventory like this
     if( np.is_shopkeeper() ) {
         np.shop_restock();

@@ -5,6 +5,7 @@
 #include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "cata_utility.h"
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
@@ -1112,6 +1113,9 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
         add_msg( _( "%s is hostile!" ), name );
         return;
     }
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     if( get_faction() ) {
         get_faction()->known_by_u = true;
     }
