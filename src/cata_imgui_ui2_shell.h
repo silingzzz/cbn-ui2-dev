@@ -22,6 +22,7 @@ enum class panel {
     missions,
     trade,
     vehicle,
+    character,
 };
 
 /// Draw the always-available console while the ImGui overlay is open.

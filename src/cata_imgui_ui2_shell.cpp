@@ -14,6 +14,7 @@
 #include "cata_imgui_ui2_missions.h"
 #include "cata_imgui_ui2_trade.h"
 #include "cata_imgui_ui2_vehicle.h"
+#include "cata_imgui_ui2_character.h"
 #include "cata_imgui_ui2_zone.h"
 #include "cata_imgui_ui2_world.h"
 #include "game.h"
@@ -47,6 +48,8 @@ auto panel_name( panel p ) -> const char *
             return "交易";
         case panel::vehicle:
             return "载具";
+        case panel::character:
+            return "人物";
         case panel::none:
         default:
             return "无";
@@ -83,6 +86,9 @@ void set_open( panel p, bool open )
             break;
         case panel::vehicle:
             ui2::veh::set_open( open );
+            break;
+        case panel::character:
+            ui2::character::set_open( open );
             break;
         case panel::none:
         default:
@@ -124,7 +130,7 @@ void draw_panel_button( const char *label, panel target )
         ImGui::PushStyleColor( ImGuiCol_Button, ImVec4( 0.18f, 0.38f, 0.58f, 1.0f ) );
         ImGui::PushStyleColor( ImGuiCol_ButtonHovered, ImVec4( 0.22f, 0.46f, 0.68f, 1.0f ) );
     }
-    if( ImGui::Button( label, ImVec2( 74.0f, 28.0f ) ) ) {
+    if( ImGui::Button( label, ImVec2( 64.0f, 28.0f ) ) ) {
         if( on ) {
             close_all();
         } else {
@@ -167,6 +173,9 @@ auto active() -> panel
     if( ui2::veh::is_open() ) {
         return panel::vehicle;
     }
+    if( ui2::character::is_open() ) {
+        return panel::character;
+    }
     return panel::none;
 }
 
@@ -178,7 +187,8 @@ auto any_open() -> bool
 void close_all()
 {
     for( panel p : { panel::aim, panel::gear, panel::craft, panel::messages, panel::zone,
-                     panel::world, panel::missions, panel::trade, panel::vehicle } ) {
+                     panel::world, panel::missions, panel::trade, panel::vehicle,
+                     panel::character } ) {
         set_open( p, false );
     }
     cata_imgui::clear_widget_focus();
@@ -240,6 +250,8 @@ void draw()
         draw_panel_button( "交易", panel::trade );
         ImGui::SameLine();
         draw_panel_button( "载具", panel::vehicle );
+        ImGui::SameLine();
+        draw_panel_button( "人物", panel::character );
         ImGui::SameLine();
         ImGui::TextDisabled( "│ 当前：%s", panel_name( active() ) );
 
