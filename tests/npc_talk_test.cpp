@@ -6,6 +6,7 @@
 #include "cata_imgui_ui2.h"
 #include "cata_imgui_ui2_missions.h"
 #include "cata_imgui_ui2_shell.h"
+#include "cata_imgui_ui2_trade.h"
 #include "catch/catch.hpp"
 #include "character.h"
 #include "character_id.h"
@@ -1169,5 +1170,35 @@ TEST_CASE("ui2_missions_tracking_and_session_reset", "[ui][mission]") {
     ui2::reset_session();
     CHECK_FALSE( ui2::missions::is_open() );
     CHECK( ui2::missions::current_tab() == ui2::missions::tab_kind::active );
+}
+
+TEST_CASE("ui2_trade_readonly_preview_and_session_reset", "[ui][trade]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    dialogue d;
+    npc &talker_npc = prep_test( d );
+    avatar &you = get_avatar();
+    talker_npc.setpos( you.bub_pos() + tripoint_east );
+    talker_npc.i_add( item::spawn( "bottle_plastic" ) );
+    you.i_add( item::spawn( "knife_combat" ) );
+
+    ui2::shell::open( ui2::shell::panel::trade );
+    CHECK( ui2::trade::is_open() );
+    CHECK( ui2::shell::active() == ui2::shell::panel::trade );
+
+    const std::vector<npc *> nearby = ui2::trade::collect_nearby_tradable_npcs();
+    CHECK( std::find( nearby.begin(), nearby.end(), &talker_npc ) != nearby.end() );
+
+    const int owed_before = talker_npc.op_of_u.owed;
+    const npc_trading::trade_state preview = ui2::trade::build_preview( talker_npc );
+    CHECK( talker_npc.op_of_u.owed == owed_before );
+    CHECK( preview.your_balance == owed_before );
+
+    ui2::trade::set_tab( ui2::trade::list_tab::yours );
+    CHECK( ui2::trade::current_tab() == ui2::trade::list_tab::yours );
+    ui2::reset_session();
+    CHECK_FALSE( ui2::trade::is_open() );
+    CHECK( ui2::trade::current_tab() == ui2::trade::list_tab::theirs );
 }
 #endif
