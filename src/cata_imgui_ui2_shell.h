@@ -20,6 +20,7 @@ enum class panel {
     zone,
     world,
     missions,
+    trade,
     vehicle,
 };
 
