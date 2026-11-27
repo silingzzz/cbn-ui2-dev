@@ -11,6 +11,7 @@
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_messages.h"
+#include "cata_imgui_ui2_missions.h"
 #include "cata_imgui_ui2_zone.h"
 #include "cata_imgui_ui2_world.h"
 #include "game.h"
@@ -38,6 +39,8 @@ auto panel_name( panel p ) -> const char *
             return "区域";
         case panel::world:
             return "世界";
+        case panel::missions:
+            return "任务";
         case panel::none:
         default:
             return "无";
@@ -65,6 +68,9 @@ void set_open( panel p, bool open )
             break;
         case panel::world:
             ui2::world::set_open( open );
+            break;
+        case panel::missions:
+            ui2::missions::set_open( open );
             break;
         case panel::none:
         default:
@@ -140,6 +146,9 @@ auto active() -> panel
     if( ui2::world::is_open() ) {
         return panel::world;
     }
+    if( ui2::missions::is_open() ) {
+        return panel::missions;
+    }
     return panel::none;
 }
 
@@ -151,10 +160,10 @@ auto any_open() -> bool
 void close_all()
 {
     for( panel p : { panel::aim, panel::gear, panel::craft, panel::messages, panel::zone,
-                     panel::world } ) {
+                     panel::world, panel::missions } ) {
         set_open( p, false );
     }
-    ImGui::ClearActiveID();
+    cata_imgui::clear_widget_focus();
 }
 
 void open( panel target )
@@ -207,6 +216,8 @@ void draw()
         draw_panel_button( "区域", panel::zone );
         ImGui::SameLine();
         draw_panel_button( "世界", panel::world );
+        ImGui::SameLine();
+        draw_panel_button( "任务", panel::missions );
         ImGui::SameLine();
         ImGui::TextDisabled( "│ 当前：%s", panel_name( active() ) );
 

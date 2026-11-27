@@ -3,6 +3,9 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "cata_imgui.h"
+#include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_missions.h"
+#include "cata_imgui_ui2_shell.h"
 #include "catch/catch.hpp"
 #include "character.h"
 #include "character_id.h"
@@ -1109,5 +1112,62 @@ TEST_CASE("ui2_npc_legacy_popup_scope_nesting_and_restore", "[ui][npc]") {
     if( cata_imgui::is_open() != was_open ) {
         cata_imgui::toggle();
     }
+}
+
+TEST_CASE("ui2_missions_tracking_and_session_reset", "[ui][mission]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    dialogue d;
+    npc &talker_npc = prep_test( d );
+    avatar &you = get_avatar();
+
+    mission *m1 = nullptr;
+    mission *m2 = nullptr;
+    for( const mission_type &mt : mission_type::get_all() ) {
+        if( mt.goal == MGOAL_FIND_ITEM || mt.goal == MGOAL_ASSASSINATE ) {
+            mission *created = mission::reserve_new( mt.id, talker_npc.getID() );
+            if( created != nullptr ) {
+                if( m1 == nullptr ) {
+                    m1 = created;
+                } else {
+                    m2 = created;
+                    break;
+                }
+            }
+        }
+    }
+    REQUIRE( m1 != nullptr );
+    REQUIRE( m2 != nullptr );
+    if( m1->get_assigned_player_id() == you.getID() ) {
+        you.on_mission_assignment( *m1 );
+    } else {
+        m1->assign( you );
+    }
+    if( m2->get_assigned_player_id() == you.getID() ) {
+        you.on_mission_assignment( *m2 );
+    } else {
+        m2->assign( you );
+    }
+
+    ui2::shell::open( ui2::shell::panel::missions );
+    CHECK( ui2::missions::is_open() );
+    CHECK( ui2::shell::active() == ui2::shell::panel::missions );
+
+    // Switching tracked mission updates avatar state immediately while panel remains open.
+    CHECK( ui2::missions::track_mission( m2 ) );
+    CHECK( you.get_active_mission() == m2 );
+    CHECK( ui2::missions::is_open() );
+
+    CHECK( ui2::missions::track_mission( m1 ) );
+    CHECK( you.get_active_mission() == m1 );
+    CHECK( ui2::missions::is_open() );
+
+    // Session reset closes the missions panel and resets tab selection.
+    ui2::missions::set_tab( ui2::missions::tab_kind::completed );
+    CHECK( ui2::missions::current_tab() == ui2::missions::tab_kind::completed );
+    ui2::reset_session();
+    CHECK_FALSE( ui2::missions::is_open() );
+    CHECK( ui2::missions::current_tab() == ui2::missions::tab_kind::active );
 }
 #endif
