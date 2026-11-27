@@ -19,6 +19,7 @@ enum class panel {
     messages,
     zone,
     world,
+    vehicle,
 };
 
 /// Draw the always-available console while the ImGui overlay is open.
