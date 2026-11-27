@@ -6,6 +6,7 @@
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_messages.h"
+#include "cata_imgui_ui2_missions.h"
 #include "cata_imgui_ui2_zone.h"
 #include "cata_imgui_ui2_shell.h"
 
@@ -222,6 +223,7 @@ void reset_session()
     ui2::gear::reset_session();
     ui2::craft::reset_session();
     ui2::messages::reset_session();
+    ui2::missions::reset_session();
     ui2::world::reset_session();
 }
 
@@ -253,6 +255,8 @@ void draw()
     ui2::messages::draw();
     // World inspect: non-modal map selection plus a small action panel.
     ui2::world::draw();
+    // P3 Missions: read-only mission tracker with instant active-mission switching.
+    ui2::missions::draw();
     // PR-6A: hover card for the tile under the game cursor.
     ui2::mapview::draw();
 }
