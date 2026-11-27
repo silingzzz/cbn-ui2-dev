@@ -4,6 +4,7 @@
 #include "calendar.h"
 #include "cata_imgui.h"
 #include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_character.h"
 #include "cata_imgui_ui2_missions.h"
 #include "cata_imgui_ui2_shell.h"
 #include "cata_imgui_ui2_trade.h"
@@ -1200,5 +1201,30 @@ TEST_CASE("ui2_trade_readonly_preview_and_session_reset", "[ui][trade]") {
     ui2::reset_session();
     CHECK_FALSE( ui2::trade::is_open() );
     CHECK( ui2::trade::current_tab() == ui2::trade::list_tab::theirs );
+}
+
+TEST_CASE("ui2_character_readonly_overview_and_session_reset", "[ui][character]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    avatar &you = get_avatar();
+    ui2::shell::open( ui2::shell::panel::character );
+    CHECK( ui2::character::is_open() );
+    CHECK( ui2::shell::active() == ui2::shell::panel::character );
+
+    const ui2::character::stats_snapshot snap = ui2::character::read_stats_snapshot();
+    CHECK( snap.str == you.get_str() );
+    CHECK( snap.str_base == you.get_str_base() );
+    CHECK( snap.dex == you.get_dex() );
+    CHECK( snap.intel == you.get_int() );
+    CHECK( snap.per == you.get_per() );
+    CHECK( snap.speed == you.get_speed() );
+    CHECK( snap.stamina_max == you.get_stamina_max() );
+
+    ui2::character::set_tab( ui2::character::tab_kind::bionics );
+    CHECK( ui2::character::current_tab() == ui2::character::tab_kind::bionics );
+    ui2::reset_session();
+    CHECK_FALSE( ui2::character::is_open() );
+    CHECK( ui2::character::current_tab() == ui2::character::tab_kind::stats );
 }
 #endif
