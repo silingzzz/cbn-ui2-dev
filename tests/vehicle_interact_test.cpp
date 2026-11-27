@@ -4,6 +4,7 @@
 #include "../src/vehicle/vpart_position.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "catch/catch.hpp"
 #include "coordinates.h"
 #include "game.h"
@@ -147,3 +148,68 @@ TEST_CASE("debug_hammerspace_installs_full_vehicle_battery", "[vehicle][veh_inte
     REQUIRE(installed_battery != all_parts.end());
     CHECK(installed_battery->part().ammo_remaining() == installed_battery->part().ammo_capacity());
 }
+
+#if defined( TILES )
+TEST_CASE("ui2_vehicle_select_part_single_and_legacy_popup_scope", "[ui][vehicle][mission]") {
+    clear_all_state();
+    const bool was_open = cata_imgui::is_open();
+    if (!was_open) {
+        cata_imgui::toggle();
+    }
+    REQUIRE(cata_imgui::is_open());
+
+    map& here = get_map();
+    const tripoint_bub_ms vehicle_origin(60, 60, 0);
+    vehicle* veh_ptr = here.add_vehicle(vproto_id("bicycle"), vehicle_origin, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+
+    // Matching 0 parts or 1 part must return without opening overview or hiding UI2.
+    veh_interact::select_part(
+        *veh_ptr,
+        [](const vehicle_part&) { return false; },
+        "No part");
+    CHECK(cata_imgui::is_open());
+
+    // Find a part id that occurs exactly once on the bicycle so select_part
+    // auto-selects it without opening overview or hiding UI2.
+    vpart_id unique_part;
+    for (const vpart_reference& vpr : veh_ptr->get_all_parts()) {
+        const vpart_id pid = vpr.info().get_id();
+        int count = 0;
+        for (const vpart_reference& other : veh_ptr->get_all_parts()) {
+            if (other.info().get_id() == pid) {
+                ++count;
+            }
+        }
+        if (count == 1) {
+            unique_part = pid;
+            break;
+        }
+    }
+    REQUIRE(unique_part != vpart_id::NULL_ID());
+
+    const vehicle_part& chosen = veh_interact::select_part(
+        *veh_ptr,
+        [&unique_part](const vehicle_part& pt) { return pt.info().get_id() == unique_part; },
+        "Unique part");
+    CHECK(chosen.info().get_id() == unique_part);
+    CHECK(cata_imgui::is_open());
+
+    // Nested legacy_popup_scope (e.g., veh_interact::run -> select_part / list_missions)
+    // stays hidden until the outermost scope exits.
+    {
+        cata_imgui::legacy_popup_scope outer_gate;
+        CHECK_FALSE(cata_imgui::is_open());
+        {
+            cata_imgui::legacy_popup_scope inner_gate;
+            CHECK_FALSE(cata_imgui::is_open());
+        }
+        CHECK_FALSE(cata_imgui::is_open());
+    }
+    CHECK(cata_imgui::is_open());
+
+    if (cata_imgui::is_open() != was_open) {
+        cata_imgui::toggle();
+    }
+}
+#endif

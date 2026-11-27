@@ -6,6 +6,7 @@
 #include "avatar.h"
 #include "avatar_functions.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
@@ -172,6 +173,9 @@ auto veh_interact::serialize_activity() -> std::unique_ptr<player_activity> {
 }
 
 auto veh_interact::run(vehicle& veh, tripoint_mnt_veh p) -> std::unique_ptr<player_activity> {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     veh_interact vehint(veh, p);
     vehint.do_main_loop();
     return vehint.serialize_activity();
@@ -194,6 +198,9 @@ auto veh_interact::select_part(
         act(std::find_if(vpr.begin(), vpr.end(), sel_wrapper)->part());
 
     } else if (opts != 0) {
+#if defined( TILES )
+        cata_imgui::legacy_popup_scope imgui_gate;
+#endif
         veh_interact vehint(const_cast<vehicle&>(veh));
         vehint.title = title.empty() ? _("Select part") : title;
         vehint.overview(sel, act);
