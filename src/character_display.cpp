@@ -3,6 +3,7 @@
 #include "addiction.h"
 #include "avatar.h"
 #include "bionics.h"
+#include "cata_imgui.h"
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
 #include "cata_utility.h"
@@ -1452,6 +1453,9 @@ static std::pair<unsigned, unsigned> calculate_shared_column_win_height(
 
 void character_display::disp_info( Character &ch )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     std::vector<std::pair<std::string, std::string>> effect_name_and_text;
     for( auto &elem : ch.get_all_effects() ) {
         for( auto &_effect_it : elem.second ) {

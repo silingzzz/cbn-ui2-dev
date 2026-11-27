@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "bionics.h"
+#include "cata_imgui.h"
 #include "catacharset.h"
 #include "cata_utility.h"
 #include "character.h"
@@ -560,6 +561,9 @@ nc_color get_bionic_text_color( const bionic &bio, const bool isHighlightedBioni
 
 void show_bionics_ui( Character &who )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     bionic_collection &bionics = *who.my_bionics;
     sorted_bionics passive = filtered_bionics( bionics, TAB_PASSIVE );
     sorted_bionics active = filtered_bionics( bionics, TAB_ACTIVE );

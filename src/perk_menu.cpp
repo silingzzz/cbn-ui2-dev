@@ -3,6 +3,7 @@
 #include "mutation.h"
 #include "perk.h"
 
+#include "cata_imgui.h"
 #include "character.h"
 #include "cursesdef.h"
 #include "cursesport.h"
@@ -57,6 +58,9 @@ void draw_cat_tabs( const catacurses::window &w, const std::vector<std::string> 
 
 void draw_perk_menu( Character &player )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     // Define the UI
     const int head_height = 4;
     int current_category = 0;
