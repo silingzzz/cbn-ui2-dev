@@ -5,6 +5,9 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "cata_imgui.h"
+#include "cata_imgui_ui2.h"
+#include "cata_imgui_ui2_shell.h"
+#include "cata_imgui_ui2_vehicle.h"
 #include "catch/catch.hpp"
 #include "coordinates.h"
 #include "game.h"
@@ -211,5 +214,38 @@ TEST_CASE("ui2_vehicle_select_part_single_and_legacy_popup_scope", "[ui][vehicle
     if (cata_imgui::is_open() != was_open) {
         cata_imgui::toggle();
     }
+}
+
+TEST_CASE("ui2_vehicle_readonly_overview_and_session_reset", "[ui][vehicle]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    map& here = get_map();
+    avatar& you = get_avatar();
+    const tripoint_bub_ms origin(60, 60, 0);
+    you.setpos(origin);
+
+    const tripoint_bub_ms veh_pos = origin + point_east;
+    vehicle* veh_ptr = here.add_vehicle(vproto_id("bicycle"), veh_pos, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+
+    const std::vector<vehicle*> nearby = ui2::veh::collect_nearby_vehicles();
+    REQUIRE(nearby.size() == 1);
+    CHECK(nearby.front() == veh_ptr);
+    CHECK(ui2::veh::count_damaged_parts(*veh_ptr) == 0);
+
+    // Damaging a part updates damaged count immediately for live overview refresh.
+    veh_ptr->mod_hp(veh_ptr->part(0), -10);
+    CHECK(ui2::veh::count_damaged_parts(*veh_ptr) >= 1);
+
+    ui2::shell::open(ui2::shell::panel::vehicle);
+    CHECK(ui2::veh::is_open());
+    CHECK(ui2::shell::active() == ui2::shell::panel::vehicle);
+
+    ui2::veh::set_damaged_only(true);
+    CHECK(ui2::veh::damaged_only());
+    ui2::reset_session();
+    CHECK_FALSE(ui2::veh::is_open());
+    CHECK_FALSE(ui2::veh::damaged_only());
 }
 #endif
