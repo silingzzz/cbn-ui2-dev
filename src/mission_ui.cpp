@@ -7,6 +7,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #include "color.h"
 #include "cursesport.h"
 #include "debug.h"
@@ -22,6 +23,9 @@
 
 void game::list_missions()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     catacurses::window w_missions;
 
     enum class tab_mode : int {
