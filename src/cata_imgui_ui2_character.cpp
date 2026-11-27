@@ -12,6 +12,7 @@
 
 #include "avatar.h"
 #include "bionics.h"
+#include "character_display.h"
 #include "effect.h"
 #include "game.h"
 #include "mutation.h"
@@ -276,7 +277,8 @@ void draw()
         return;
     }
 
-    const avatar &you = get_avatar();
+    bool open_legacy_character = false;
+    avatar &you = get_avatar();
     if( you.get_body().empty() ) {
         ImGui::TextDisabled( "角色尚未初始化。" );
         ImGui::End();
@@ -291,6 +293,10 @@ void draw()
         if( ImGui::Button( "清空" ) ) {
             g_filter[0] = '\0';
         }
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "打开完整人物界面 (@)…" ) ) {
+        open_legacy_character = true;
     }
     ImGui::SameLine();
     ImGui::TextDisabled( "│ %s", you.get_name().c_str() );
@@ -327,6 +333,10 @@ void draw()
     }
 
     ImGui::End();
+
+    if( open_legacy_character ) {
+        character_display::disp_info( you );
+    }
 }
 
 } // namespace character

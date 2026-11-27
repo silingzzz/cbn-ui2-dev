@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "cata_imgui.h"
 #include "character.h"
 #include "cursesport.h"
 #include "enums.h"
@@ -114,7 +115,13 @@ void show_mutations_ui( Character &who )
     // Mutation selection UI obscures the terrain,
     // but some mutations may ask to select a tile when activated.
     // As such, we must (de-)activate only after destroying the UI.
-    detail::mutations_ui_result res = detail::show_mutations_ui_internal( who );
+    detail::mutations_ui_result res;
+    {
+#if defined( TILES )
+        cata_imgui::legacy_popup_scope imgui_gate;
+#endif
+        res = detail::show_mutations_ui_internal( who );
+    }
 
     switch( res.cmd ) {
         case detail::mutations_ui_cmd::exit:

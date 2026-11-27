@@ -5,6 +5,7 @@
 #include "avatar.h"
 #include "cached_options.h"
 #include "calendar.h"
+#include "cata_imgui.h"
 #ifdef TILES
 #    include "cata_tiles.h"
 #endif // TILES
@@ -1992,6 +1993,9 @@ static auto get_overmap_path_to(const tripoint_abs_omt dest, bool driving)
 
 static auto display(const tripoint_abs_omt& orig, const draw_data_t& data = draw_data_t())
     -> tripoint_abs_omt {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     // the overmap context may be shared with the main view's; each view re-asserts zoom on takeover
     g->reapply_overmap_zoom();
     on_out_of_scope reset_zoom([]() {
