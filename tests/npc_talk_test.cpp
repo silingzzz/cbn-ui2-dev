@@ -27,6 +27,7 @@
 #include "pimpl.h"
 #include "player.h"
 #include "player_helpers.h"
+#include "skill.h"
 #include "state_helpers.h"
 #include "string_formatter.h"
 #include "string_id.h"
@@ -1226,5 +1227,21 @@ TEST_CASE("ui2_character_readonly_overview_and_session_reset", "[ui][character]"
     ui2::reset_session();
     CHECK_FALSE( ui2::character::is_open() );
     CHECK( ui2::character::current_tab() == ui2::character::tab_kind::stats );
+}
+
+TEST_CASE("ui2_character_interactive_skill_training", "[ui][character]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    ui2::shell::open( ui2::shell::panel::character );
+    REQUIRE( ui2::character::is_open() );
+
+    const skill_id test_skill( "fabrication" );
+    const bool before = ui2::character::is_skill_training( test_skill );
+    const bool after = ui2::character::toggle_skill_training( test_skill );
+    CHECK( after == !before );
+    CHECK( ui2::character::is_skill_training( test_skill ) == after );
+    CHECK( get_avatar().get_skill_level_object( test_skill ).isTraining() == after );
+    CHECK( ui2::character::is_open() );
 }
 #endif

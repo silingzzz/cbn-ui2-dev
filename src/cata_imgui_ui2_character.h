@@ -4,6 +4,8 @@
 
 #if defined( TILES )
 
+#include "type_id.h"
+
 namespace ui2
 {
 namespace character
@@ -40,8 +42,10 @@ void set_open( bool open );
 void reset_session();
 void draw();
 
-// Read-only query helpers exposed for UI and Catch2 tests.
+// Read-only query & interactive helpers exposed for UI and Catch2 tests.
 auto read_stats_snapshot() -> stats_snapshot;
+bool is_skill_training( const skill_id &id );
+bool toggle_skill_training( const skill_id &id );
 void set_tab( tab_kind tab );
 tab_kind current_tab();
 
