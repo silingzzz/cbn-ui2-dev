@@ -24,6 +24,7 @@ namespace
 bool g_open = false;
 npc *g_selected = nullptr;
 npc *g_cached_npc = nullptr;
+npc *g_pending_legacy_trade = nullptr;
 npc_trading::trade_state g_state;
 bool g_state_valid = false;
 std::string g_status_msg;
@@ -145,6 +146,7 @@ void reset_session()
     g_open = false;
     g_selected = nullptr;
     g_cached_npc = nullptr;
+    g_pending_legacy_trade = nullptr;
     g_state = npc_trading::trade_state{};
     g_state_valid = false;
     g_status_msg.clear();
@@ -299,13 +301,23 @@ bool commit_trade( npc_trading::trade_state &state, npc &target )
     return true;
 }
 
+bool take_deferred_action()
+{
+    if( g == nullptr || g_pending_legacy_trade == nullptr ) {
+        return false;
+    }
+    npc *target = g_pending_legacy_trade;
+    g_pending_legacy_trade = nullptr;
+    npc_trading::trade( *target, 0, "" );
+    g_state_valid = false;
+    return true;
+}
+
 void draw()
 {
     if( !g_open ) {
         return;
     }
-
-    npc *pending_legacy_trade = nullptr;
 
     ImGui::SetNextWindowPos( ImVec2( 12.0f, 132.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 940.0f, 560.0f ), ImGuiCond_FirstUseEver );
@@ -399,7 +411,7 @@ void draw()
         }
         ImGui::SameLine();
         if( ImGui::Button( "打开完整交易界面…" ) ) {
-            pending_legacy_trade = &target;
+            g_pending_legacy_trade = &target;
         }
 
         ImGui::Text( "议价倍率：%.2fx  │  结算差额：$%.2f  │  可赊账上限：$%.2f  │  %s",
@@ -437,11 +449,6 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
-
-    if( pending_legacy_trade != nullptr ) {
-        npc_trading::trade( *pending_legacy_trade, 0, "" );
-        g_state_valid = false;
-    }
 }
 
 } // namespace trade

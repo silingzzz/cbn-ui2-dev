@@ -29,8 +29,16 @@
 namespace
 {
 
+enum class deferred_kind {
+    none,
+    interact,
+    controls,
+};
+
 bool g_open = false;
 vehicle *g_selected = nullptr;
+vehicle *g_pending_veh = nullptr;
+deferred_kind g_deferred = deferred_kind::none;
 bool g_damaged_only = false;
 char g_filter[64] = "";
 
@@ -96,6 +104,8 @@ void reset_session()
 {
     g_open = false;
     g_selected = nullptr;
+    g_pending_veh = nullptr;
+    g_deferred = deferred_kind::none;
     g_damaged_only = false;
     g_filter[0] = '\0';
 }
@@ -185,14 +195,35 @@ bool toggle_feature( ::vehicle &v, const std::string &feature )
     return true;
 }
 
+bool take_deferred_action()
+{
+    if( g == nullptr || g_pending_veh == nullptr || g_deferred == deferred_kind::none ) {
+        return false;
+    }
+    vehicle *target = g_pending_veh;
+    const deferred_kind kind = g_deferred;
+    g_pending_veh = nullptr;
+    g_deferred = deferred_kind::none;
+    if( kind == deferred_kind::interact ) {
+        std::unique_ptr<player_activity> act =
+            veh_interact::run( *target, tripoint_mnt_veh::zero() );
+        if( act ) {
+            get_avatar().assign_activity( std::move( act ) );
+        }
+        return true;
+    }
+    if( kind == deferred_kind::controls ) {
+        target->use_controls( get_avatar().bub_pos() );
+        return true;
+    }
+    return false;
+}
+
 void draw()
 {
     if( !g_open ) {
         return;
     }
-
-    vehicle *pending_interact = nullptr;
-    vehicle *pending_controls = nullptr;
 
     ImGui::SetNextWindowPos( ImVec2( 12.0f, 132.0f ), ImGuiCond_FirstUseEver );
     ImGui::SetNextWindowSize( ImVec2( 940.0f, 560.0f ), ImGuiCond_FirstUseEver );
@@ -257,12 +288,14 @@ void draw()
         ImGui::TextColored( ImVec4( 0.65f, 0.88f, 1.0f, 1.0f ), "%s", v.name.c_str() );
         ImGui::SameLine();
         if( ImGui::Button( "打开完整改装界面…" ) ) {
-            pending_interact = &v;
+            g_pending_veh = &v;
+            g_deferred = deferred_kind::interact;
         }
         if( v.player_in_control( you ) ) {
             ImGui::SameLine();
             if( ImGui::Button( "车辆控制菜单…" ) ) {
-                pending_controls = &v;
+                g_pending_veh = &v;
+                g_deferred = deferred_kind::controls;
             }
         }
 
@@ -323,16 +356,6 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
-
-    if( pending_interact != nullptr ) {
-        std::unique_ptr<player_activity> act =
-            veh_interact::run( *pending_interact, tripoint_mnt_veh::zero() );
-        if( act ) {
-            get_avatar().assign_activity( std::move( act ) );
-        }
-    } else if( pending_controls != nullptr ) {
-        pending_controls->use_controls( get_avatar().bub_pos() );
-    }
 }
 
 } // namespace veh

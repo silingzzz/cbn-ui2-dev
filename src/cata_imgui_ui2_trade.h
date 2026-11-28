@@ -26,6 +26,7 @@ void toggle();
 void set_open( bool open );
 void reset_session();
 void draw();
+bool take_deferred_action();
 
 // Read-only query & interactive trade helpers exposed for UI and Catch2 tests.
 auto collect_nearby_tradable_npcs( int max_range = 10 ) -> std::vector<npc *>;

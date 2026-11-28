@@ -41,6 +41,7 @@ void toggle();
 void set_open( bool open );
 void reset_session();
 void draw();
+bool take_deferred_action();
 
 // Read-only query & interactive helpers exposed for UI and Catch2 tests.
 auto read_stats_snapshot() -> stats_snapshot;
