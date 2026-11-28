@@ -6,7 +6,9 @@
 #include <cctype>
 #include <cstdio>
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <imgui.h>
@@ -15,7 +17,9 @@
 #include "game.h"
 #include "itype.h"
 #include "map/map.h"
+#include "player_activity.h"
 #include "units_mass.h"
+#include "vehicle/veh_interact.h"
 #include "vehicle/veh_type.h"
 #include "vehicle/vehicle.h"
 #include "vehicle/vehicle_part.h"
@@ -42,6 +46,28 @@ bool contains_ci( const std::string &haystack, const std::string &needle )
                std::tolower( static_cast<unsigned char>( b ) );
     } );
     return it != haystack.end();
+}
+
+void draw_feature_button( vehicle &v, const char *label, const char *feature )
+{
+    if( !ui2::veh::has_feature( v, feature ) ) {
+        return;
+    }
+    const bool enabled = ui2::veh::is_feature_enabled( v, feature );
+    if( enabled ) {
+        ImGui::PushStyleColor( ImGuiCol_Button, ImVec4( 0.20f, 0.52f, 0.30f, 1.0f ) );
+        ImGui::PushStyleColor( ImGuiCol_ButtonHovered, ImVec4( 0.26f, 0.62f, 0.38f, 1.0f ) );
+    }
+    char btn_label[64];
+    std::snprintf( btn_label, sizeof( btn_label ), "%s: %s###btn_%s",
+                   label, enabled ? "开" : "关", feature );
+    if( ImGui::Button( btn_label ) ) {
+        ui2::veh::toggle_feature( v, feature );
+    }
+    if( enabled ) {
+        ImGui::PopStyleColor( 2 );
+    }
+    ImGui::SameLine();
 }
 
 } // namespace
@@ -119,15 +145,58 @@ auto count_damaged_parts( const ::vehicle &v ) -> int
     return damaged;
 }
 
+bool has_feature( const ::vehicle &v, const std::string &feature )
+{
+    for( const vpart_reference &vpr : v.get_all_parts() ) {
+        if( !vpr.part().is_broken() && vpr.info().has_flag( feature ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_feature_enabled( const ::vehicle &v, const std::string &feature )
+{
+    for( const vpart_reference &vpr : v.get_all_parts() ) {
+        const vehicle_part &pt = vpr.part();
+        if( !pt.is_broken() && vpr.info().has_flag( feature ) && pt.enabled ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool toggle_feature( ::vehicle &v, const std::string &feature )
+{
+    if( !has_feature( v, feature ) ) {
+        return false;
+    }
+    const bool next_state = !is_feature_enabled( v, feature );
+    for( const vpart_reference &vpr : v.get_all_parts() ) {
+        vehicle_part &pt = v.part( vpr.part_index() );
+        if( !pt.is_broken() && vpr.info().has_flag( feature ) ) {
+            pt.enabled = next_state;
+        }
+    }
+    v.refresh();
+    if( g != nullptr ) {
+        get_map().invalidate_lightmap_caches();
+    }
+    return true;
+}
+
 void draw()
 {
     if( !g_open ) {
         return;
     }
 
+    vehicle *pending_interact = nullptr;
+    vehicle *pending_controls = nullptr;
+
     ImGui::SetNextWindowPos( ImVec2( 12.0f, 132.0f ), ImGuiCond_FirstUseEver );
-    ImGui::SetNextWindowSize( ImVec2( 920.0f, 540.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "载具总览 (只读)###ui2_vehicle_window", &g_open ) ) {
+    ImGui::SetNextWindowSize( ImVec2( 940.0f, 560.0f ), ImGuiCond_FirstUseEver );
+    if( !ImGui::Begin( "载具总览与控制###ui2_vehicle_window", &g_open ) ) {
         ImGui::End();
         return;
     }
@@ -159,7 +228,7 @@ void draw()
 
     ImGui::Separator();
 
-    ImGui::BeginChild( "##veh_list", ImVec2( 260.0f, 0.0f ), true );
+    ImGui::BeginChild( "##veh_list", ImVec2( 250.0f, 0.0f ), true );
     if( nearby.empty() ) {
         ImGui::TextDisabled( "身边 3x3 范围内没有载具。" );
     } else {
@@ -179,15 +248,37 @@ void draw()
     ImGui::SameLine();
     ImGui::BeginChild( "##veh_detail", ImVec2( 0.0f, 0.0f ), true );
     if( g_selected == nullptr ) {
-        ImGui::TextDisabled( "选择左侧载具查看总览。" );
+        ImGui::TextDisabled( "选择左侧载具查看总览与控制。" );
     } else {
-        const vehicle &v = *g_selected;
+        vehicle &v = *g_selected;
+        avatar &you = get_avatar();
         const int damaged = count_damaged_parts( v );
         const auto mass_kg = units::to_kilogram( v.total_mass() );
         ImGui::TextColored( ImVec4( 0.65f, 0.88f, 1.0f, 1.0f ), "%s", v.name.c_str() );
-        ImGui::Text( "速度：%d / 安全速度 %d  │  总质量：%lld kg  │  受损部件：%d",
+        ImGui::SameLine();
+        if( ImGui::Button( "打开完整改装界面…" ) ) {
+            pending_interact = &v;
+        }
+        if( v.player_in_control( you ) ) {
+            ImGui::SameLine();
+            if( ImGui::Button( "车辆控制菜单…" ) ) {
+                pending_controls = &v;
+            }
+        }
+
+        ImGui::Text( "速度：%d / 安全速度 %d  │  总质量：%lld kg  │  受损部件：%d  │  引擎：%s",
                      v.velocity, v.safe_velocity(),
-                     static_cast<long long>( mass_kg ), damaged );
+                     static_cast<long long>( mass_kg ), damaged,
+                     v.engine_on ? "运行中" : "熄火" );
+
+        draw_feature_button( v, "前灯", "CONE_LIGHT" );
+        draw_feature_button( v, "探照灯", "CIRCLE_LIGHT" );
+        draw_feature_button( v, "顶灯", "DOME_LIGHT" );
+        draw_feature_button( v, "冰箱", "FRIDGE" );
+        draw_feature_button( v, "冷冻柜", "FREEZER" );
+        draw_feature_button( v, "充电站", "RECHARGER" );
+        draw_feature_button( v, "音响", "STEREO" );
+        ImGui::NewLine();
 
         const std::map<itype_id, int> fuels = v.fuels_left();
         if( fuels.empty() ) {
@@ -232,6 +323,16 @@ void draw()
     ImGui::EndChild();
 
     ImGui::End();
+
+    if( pending_interact != nullptr ) {
+        std::unique_ptr<player_activity> act =
+            veh_interact::run( *pending_interact, tripoint_mnt_veh::zero() );
+        if( act ) {
+            get_avatar().assign_activity( std::move( act ) );
+        }
+    } else if( pending_controls != nullptr ) {
+        pending_controls->use_controls( get_avatar().bub_pos() );
+    }
 }
 
 } // namespace veh

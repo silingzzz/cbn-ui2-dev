@@ -416,8 +416,10 @@ private:
     // convert vhp to watts.
     static auto vhp_to_watts(int power) -> int;
 
+public:
     // Refresh all caches and re-locate all parts
     void refresh();
+private:
 
     // Do stuff like clean up blood and produce smoke from broken parts. Returns false if nothing
     // needs doing.
