@@ -2590,7 +2590,7 @@ void options_manager::add_options_graphics()
 #if defined(TILES)
     add( "IMGUI_PROTOTYPE", graphics, translate_marker( "ImGui prototype overlay" ),
          translate_marker( "Enable the experimental ImGui overlay used for UI development.  Press F10 in game to toggle the window.  Requires restart." ),
-         false, COPT_CURSES_HIDE
+         true, COPT_CURSES_HIDE
        );
 #endif
     add( "FRAMEBUFFER_ACCEL", graphics, translate_marker( "Software framebuffer acceleration" ),
