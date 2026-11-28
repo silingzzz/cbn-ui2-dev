@@ -55,12 +55,6 @@ bool g_legacy_restore_overlay = false;
 // through and close the shell that just came back.
 int g_resume_guard_frames = 0;
 
-// Prototype widgets only; real UI work starts in PR-2.
-char g_text_buffer[128] = "你好, Cataclysm";
-int g_slider_value = 50;
-bool g_checkbox_value = true;
-unsigned long long g_btn_clicks = 0;
-
 // Diagnostic counters, enabled with CBN_IMGUI_TRACE (value = output file path,
 // or "1" for ./imgui_trace.log). Purpose: separate "the event never arrived"
 // from "toggle ran but no frame was ever drawn" without guessing.
@@ -308,39 +302,6 @@ auto pointer_over_interactive_window( const ImVec2 &mouse ) -> bool
     return false;
 }
 
-auto draw_prototype_window() -> void
-{
-    ImGui::SetNextWindowSize( ImVec2( 420.0f, 260.0f ), ImGuiCond_FirstUseEver );
-    if( !ImGui::Begin( "CBN UI 2.0 prototype", &g_open ) ) {
-        ImGui::End();
-        return;
-    }
-
-    ImGui::Text( "帧率: %.1f FPS", ImGui::GetIO().Framerate );
-    ImGui::Separator();
-    // Oversized target button: PR-1 fault isolation needs a hit test that cannot
-    // fail for reasons of tiny geometry. The press counter is the evidence.
-    if( ImGui::Button( "BIG TEST BUTTON", ImVec2( 380.0f, 120.0f ) ) ) {
-        ++g_btn_clicks;
-        if( trace_on() ) {
-            ++g_trace.btn_clicks;
-        }
-    }
-    if( trace_on() && ImGui::IsItemHovered() ) {
-        ++g_trace.btn_hover;
-    }
-    ImGui::Text( "按钮点击: %llu 次", g_btn_clicks );
-    ImGui::InputText( "文本输入 (IME)", g_text_buffer, IM_ARRAYSIZE( g_text_buffer ) );
-    ImGui::Checkbox( "复选框", &g_checkbox_value );
-    ImGui::SliderInt( "滑块", &g_slider_value, 0, 100 );
-    if( ImGui::Button( "关闭" ) ) {
-        g_open = false;
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled( "F10 切换显示" );
-    ImGui::End();
-}
-
 } // namespace
 
 namespace cata_imgui
@@ -364,8 +325,6 @@ void toggle()
     }
     if( g_open ) {
         SDL_StartTextInput( g_window );
-        // Reopening the overlay must never leave the demo windows unreachable.
-        ui2::reset();
         g_mouse_passthrough = ui2::world::is_open();
     } else {
         SDL_StopTextInput( g_window );
@@ -728,13 +687,6 @@ auto render( SDL_Renderer *renderer ) -> void
         --g_resume_guard_frames;
         g_redraw_pending = true;
     } else if( g_open ) {
-        // Diagnostic prototype widgets are opt-in; the default overlay is the
-        // UI 2.0 shell plus its business windows.
-        const char *const prototype = SDL_getenv( "CBN_IMGUI_PROTOTYPE" );
-        if( prototype != nullptr && std::strcmp( prototype, "0" ) != 0 ) {
-            draw_prototype_window();
-        }
-        // PR-1.5 component demo, kept out of the PR-1 diagnostic window.
         ui2::draw();
     }
     // The window can also be closed from inside the frame (title bar X or the
