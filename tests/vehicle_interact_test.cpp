@@ -248,4 +248,26 @@ TEST_CASE("ui2_vehicle_readonly_overview_and_session_reset", "[ui][vehicle]") {
     CHECK_FALSE(ui2::veh::is_open());
     CHECK_FALSE(ui2::veh::damaged_only());
 }
+
+TEST_CASE("ui2_vehicle_interactive_feature_toggle", "[ui][vehicle]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    map& here = get_map();
+    avatar& you = get_avatar();
+    const tripoint_bub_ms origin(60, 60, 0);
+    you.setpos(origin);
+
+    vehicle* veh_ptr = here.add_vehicle(vproto_id("car"), origin + point_east, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+    REQUIRE(ui2::veh::has_feature(*veh_ptr, "CONE_LIGHT"));
+
+    ui2::shell::open(ui2::shell::panel::vehicle);
+    REQUIRE(ui2::veh::is_open());
+
+    const bool before = ui2::veh::is_feature_enabled(*veh_ptr, "CONE_LIGHT");
+    CHECK(ui2::veh::toggle_feature(*veh_ptr, "CONE_LIGHT"));
+    CHECK(ui2::veh::is_feature_enabled(*veh_ptr, "CONE_LIGHT") == !before);
+    CHECK(ui2::veh::is_open());
+}
 #endif
