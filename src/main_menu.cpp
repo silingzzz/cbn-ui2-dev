@@ -2,6 +2,9 @@
 
 #include "auto_pickup.h"
 #include "avatar.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "catalua.h"
@@ -606,6 +609,11 @@ void main_menu::load_char_templates()
 
 bool main_menu::opening_screen()
 {
+#if defined( TILES )
+    // Keep the UI2 shell yielded across the entire title / load / new-game
+    // entry flow so it never intercepts mouse clicks or Space/F10 on menus.
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     // set holiday based on local system time
     current_holiday = get_holiday_from_time();
 
