@@ -2,6 +2,9 @@
 #include "cursesport.h"
 
 #include "avatar.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
@@ -2250,6 +2253,9 @@ std::vector<char> inventory_selector::all_bound_keys() const
 
 item *inventory_pick_selector::execute()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
     while( true ) {
         ui_manager::redraw();
@@ -2367,6 +2373,9 @@ inventory_compare_selector::inventory_compare_selector( player &p ) :
 
 std::pair<const item *, const item *> inventory_compare_selector::execute()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
     while( true ) {
         ui_manager::redraw();
@@ -2440,6 +2449,9 @@ inventory_iuse_selector::inventory_iuse_selector(
 
 std::vector<iuse_location> inventory_iuse_selector::execute()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
 
     int count = 0;
@@ -2575,6 +2587,9 @@ void inventory_drop_selector::process_selected( int &count,
 
 drop_locations inventory_drop_selector::execute()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
     this->keep_open = false;
     preview_dirty = true;
@@ -2770,6 +2785,9 @@ inventory_pickup_selector::inventory_pickup_selector( player &p,
 
 std::vector<pickup::pick_drop_selection> inventory_pickup_selector::execute()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     shared_ptr_fast<ui_adaptor> ui = create_or_get_ui_adaptor();
 
     while( true ) {
