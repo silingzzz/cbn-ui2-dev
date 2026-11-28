@@ -1227,4 +1227,35 @@ TEST_CASE("ui2_character_readonly_overview_and_session_reset", "[ui][character]"
     CHECK_FALSE( ui2::character::is_open() );
     CHECK( ui2::character::current_tab() == ui2::character::tab_kind::stats );
 }
+
+TEST_CASE("ui2_trade_interactive_select_and_commit", "[ui][trade]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    dialogue d;
+    npc &talker_npc = prep_test( d );
+    avatar &you = get_avatar();
+    talker_npc.setpos( you.bub_pos() + tripoint_east );
+    talker_npc.op_of_u.owed = 100000;
+    talker_npc.i_add( item::spawn( "bottle_plastic" ) );
+    you.i_add( item::spawn( "knife_combat" ) );
+
+    ui2::shell::open( ui2::shell::panel::trade );
+    REQUIRE( ui2::trade::is_open() );
+
+    npc_trading::trade_state state = ui2::trade::build_preview( talker_npc );
+    REQUIRE_FALSE( state.theirs.empty() );
+    CHECK_FALSE( ui2::trade::has_selected_items( state ) );
+    CHECK_FALSE( ui2::trade::can_commit( state, talker_npc ) );
+
+    const int balance_before = state.your_balance;
+    REQUIRE( ui2::trade::set_item_selection( state, talker_npc, true, 0, 1 ) );
+    CHECK( ui2::trade::has_selected_items( state ) );
+    CHECK( state.your_balance <= balance_before );
+    CHECK( ui2::trade::can_commit( state, talker_npc ) );
+
+    REQUIRE( ui2::trade::commit_trade( state, talker_npc ) );
+    CHECK( ui2::trade::is_open() );
+    CHECK( talker_npc.op_of_u.owed == npc_trading::calc_npc_owes_you( state, talker_npc ) );
+}
 #endif
