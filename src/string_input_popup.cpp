@@ -16,6 +16,7 @@
 #include "wcwidth.h"
 
 #if defined(TILES)
+#include "cata_imgui.h"
 #include "sdl_wrappers.h"
 #endif
 
@@ -364,8 +365,14 @@ const std::string &string_input_popup::query_string( const bool loop, const bool
     }
 
     std::optional<ime_sentry> sentry;
+#if defined(TILES)
+    std::optional<cata_imgui::legacy_popup_scope> imgui_gate;
+#endif
     if( !draw_only && loop ) {
         sentry.emplace();
+#if defined(TILES)
+        imgui_gate.emplace();
+#endif
     }
     utf8_wrapper ret( _text );
     utf8_wrapper edit( ctxt->get_edittext() );

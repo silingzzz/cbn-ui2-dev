@@ -10,6 +10,9 @@
 #include <vector>
 
 #include "action.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "color.h"
@@ -149,6 +152,9 @@ std::string help::get_note_colors()
 
 void help::display_help()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     catacurses::window w_help_border;
     catacurses::window w_help;
 
