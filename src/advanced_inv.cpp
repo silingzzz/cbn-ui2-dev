@@ -5,6 +5,9 @@
 #include "auto_pickup.h"
 #include "avatar.h"
 #include "calendar.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
@@ -1347,6 +1350,9 @@ void advanced_inventory::action_examine( advanced_inv_listitem *sitem,
 
 void advanced_inventory::display()
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     init();
 
     g->u.inv_restack( );

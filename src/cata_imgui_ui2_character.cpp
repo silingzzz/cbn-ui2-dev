@@ -12,10 +12,12 @@
 
 #include "avatar.h"
 #include "bionics.h"
+#include "bionics_ui.h"
 #include "character_display.h"
 #include "effect.h"
 #include "game.h"
 #include "mutation.h"
+#include "mutation_ui.h"
 #include "perk.h"
 #include "skill.h"
 #include "units.h"
@@ -23,7 +25,16 @@
 namespace
 {
 
+enum class deferred_kind {
+    none,
+    legacy_info,
+    bionics,
+    mutations,
+    perks,
+};
+
 bool g_open = false;
+deferred_kind g_deferred = deferred_kind::none;
 ui2::character::tab_kind g_tab = ui2::character::tab_kind::stats;
 bool g_only_trained_skills = false;
 char g_filter[64] = "";
@@ -89,7 +100,7 @@ void draw_stats_tab( const avatar &you )
     }
 }
 
-void draw_skills_tab( const avatar &you )
+void draw_skills_tab( avatar &you )
 {
     ImGui::Checkbox( "仅看已提升技能 (>0级)", &g_only_trained_skills );
     ImGui::Separator();
@@ -113,8 +124,21 @@ void draw_skills_tab( const avatar &you )
             continue;
         }
         ++shown;
-        const int pct = you.get_skill_level_object( sk->ident() ).exercise();
-        ImGui::BulletText( "%s：Lv %d (%d%%)", name.c_str(), lvl, pct );
+        SkillLevel &sk_lvl = you.get_skill_level_object( sk->ident() );
+        const int pct = sk_lvl.exercise();
+        bool training = sk_lvl.isTraining();
+
+        ImGui::PushID( sk->ident().c_str() );
+        if( ImGui::Checkbox( "##train", &training ) ) {
+            sk_lvl.toggleTraining();
+        }
+        ImGui::SameLine();
+        if( training ) {
+            ImGui::Text( "%s：Lv %d (%d%%) [训练中]", name.c_str(), lvl, pct );
+        } else {
+            ImGui::TextDisabled( "%s：Lv %d (%d%%) [已暂停]", name.c_str(), lvl, pct );
+        }
+        ImGui::PopID();
     }
     if( shown == 0 ) {
         ImGui::TextDisabled( "没有符合条件的技能。" );
@@ -219,6 +243,7 @@ void set_open( bool open )
 void reset_session()
 {
     g_open = false;
+    g_deferred = deferred_kind::none;
     g_tab = tab_kind::stats;
     g_only_trained_skills = false;
     g_filter[0] = '\0';
@@ -234,13 +259,29 @@ tab_kind current_tab()
     return g_tab;
 }
 
+bool is_skill_training( const skill_id &id )
+{
+    if( g == nullptr ) {
+        return false;
+    }
+    return get_avatar().get_skill_level_object( id ).isTraining();
+}
+
+bool toggle_skill_training( const skill_id &id )
+{
+    if( g == nullptr ) {
+        return false;
+    }
+    return get_avatar().get_skill_level_object( id ).toggleTraining();
+}
+
 auto read_stats_snapshot() -> stats_snapshot
 {
     stats_snapshot snap;
     if( g == nullptr ) {
         return snap;
     }
-    const avatar &you = get_avatar();
+    avatar &you = get_avatar();
     snap.str = you.get_str();
     snap.str_base = you.get_str_base();
     snap.dex = you.get_dex();
@@ -256,6 +297,33 @@ auto read_stats_snapshot() -> stats_snapshot
     snap.power_kj = static_cast<int>( units::to_kilojoule( you.get_power_level() ) );
     snap.max_power_kj = static_cast<int>( units::to_kilojoule( you.get_max_power_level() ) );
     return snap;
+}
+
+bool take_deferred_action()
+{
+    if( g == nullptr || g_deferred == deferred_kind::none ) {
+        return false;
+    }
+    const deferred_kind kind = g_deferred;
+    g_deferred = deferred_kind::none;
+    avatar &you = get_avatar();
+    switch( kind ) {
+        case deferred_kind::legacy_info:
+            character_display::disp_info( you );
+            return true;
+        case deferred_kind::bionics:
+            show_bionics_ui( you );
+            return true;
+        case deferred_kind::mutations:
+            show_mutations_ui( you );
+            return true;
+        case deferred_kind::perks:
+            draw_perk_menu( you );
+            return true;
+        case deferred_kind::none:
+        default:
+            return false;
+    }
 }
 
 void draw()
@@ -277,7 +345,6 @@ void draw()
         return;
     }
 
-    bool open_legacy_character = false;
     avatar &you = get_avatar();
     if( you.get_body().empty() ) {
         ImGui::TextDisabled( "角色尚未初始化。" );
@@ -285,7 +352,7 @@ void draw()
         return;
     }
 
-    ImGui::SetNextItemWidth( 240.0f );
+    ImGui::SetNextItemWidth( 220.0f );
     ImGui::InputTextWithHint( "##char_filter", "过滤技能/特质/义体/状态…",
                               g_filter, IM_ARRAYSIZE( g_filter ) );
     if( g_filter[0] != '\0' ) {
@@ -295,8 +362,20 @@ void draw()
         }
     }
     ImGui::SameLine();
-    if( ImGui::Button( "打开完整人物界面 (@)…" ) ) {
-        open_legacy_character = true;
+    if( ImGui::Button( "完整人物 (@)…" ) ) {
+        g_deferred = deferred_kind::legacy_info;
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "义体 (p)…" ) ) {
+        g_deferred = deferred_kind::bionics;
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "变异 ([)…" ) ) {
+        g_deferred = deferred_kind::mutations;
+    }
+    ImGui::SameLine();
+    if( ImGui::Button( "专长…" ) ) {
+        g_deferred = deferred_kind::perks;
     }
     ImGui::SameLine();
     ImGui::TextDisabled( "│ %s", you.get_name().c_str() );
@@ -333,10 +412,6 @@ void draw()
     }
 
     ImGui::End();
-
-    if( open_legacy_character ) {
-        character_display::disp_info( you );
-    }
 }
 
 } // namespace character

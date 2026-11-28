@@ -2,9 +2,12 @@
 
 #include "cata_imgui.h"
 #include "cata_imgui_ui2_aim.h"
+#include "cata_imgui_ui2_character.h"
 #include "cata_imgui_ui2_gear.h"
 #include "cata_imgui_ui2_craft.h"
 #include "cata_imgui_ui2_messages.h"
+#include "cata_imgui_ui2_trade.h"
+#include "cata_imgui_ui2_vehicle.h"
 #include "cata_imgui_ui2_zone.h"
 #include "cata_imgui_ui2_world.h"
 #include "advanced_inv.h"
@@ -1973,6 +1976,15 @@ bool game::handle_action()
         return false;
     }
     if( ui2::craft::take_deferred_action() ) {
+        return false;
+    }
+    if( ui2::character::take_deferred_action() ) {
+        return false;
+    }
+    if( ui2::trade::take_deferred_action() ) {
+        return false;
+    }
+    if( ui2::veh::take_deferred_action() ) {
         return false;
     }
     ui2::world::request world_request;

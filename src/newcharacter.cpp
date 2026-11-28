@@ -21,6 +21,9 @@
 #include "addiction.h"
 #include "bionics.h"
 #include "cached_options.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "debug.h"
@@ -611,6 +614,12 @@ bool avatar::create( character_type type, const std::string &tempname )
 
     const bool interactive = type != character_type::NOW &&
                              type != character_type::FULL_RANDOM;
+#if defined( TILES )
+    std::optional<cata_imgui::legacy_popup_scope> imgui_gate;
+    if( interactive ) {
+        imgui_gate.emplace();
+    }
+#endif
 
     int tab = 0;
     points_left points = points_left();
