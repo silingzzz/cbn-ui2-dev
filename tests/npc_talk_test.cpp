@@ -27,6 +27,7 @@
 #include "pimpl.h"
 #include "player.h"
 #include "player_helpers.h"
+#include "skill.h"
 #include "state_helpers.h"
 #include "string_formatter.h"
 #include "string_id.h"
@@ -1257,5 +1258,21 @@ TEST_CASE("ui2_trade_interactive_select_and_commit", "[ui][trade]") {
     REQUIRE( ui2::trade::commit_trade( state, talker_npc ) );
     CHECK( ui2::trade::is_open() );
     CHECK( talker_npc.op_of_u.owed == npc_trading::calc_npc_owes_you( state, talker_npc ) );
+}
+
+TEST_CASE("ui2_character_interactive_skill_training", "[ui][character]") {
+    clear_all_state();
+    ui2::reset_session();
+
+    ui2::shell::open( ui2::shell::panel::character );
+    REQUIRE( ui2::character::is_open() );
+
+    const skill_id test_skill( "fabrication" );
+    const bool before = ui2::character::is_skill_training( test_skill );
+    const bool after = ui2::character::toggle_skill_training( test_skill );
+    CHECK( after == !before );
+    CHECK( ui2::character::is_skill_training( test_skill ) == after );
+    CHECK( get_avatar().get_skill_level_object( test_skill ).isTraining() == after );
+    CHECK( ui2::character::is_open() );
 }
 #endif

@@ -89,7 +89,7 @@ void draw_stats_tab( const avatar &you )
     }
 }
 
-void draw_skills_tab( const avatar &you )
+void draw_skills_tab( avatar &you )
 {
     ImGui::Checkbox( "仅看已提升技能 (>0级)", &g_only_trained_skills );
     ImGui::Separator();
@@ -113,8 +113,21 @@ void draw_skills_tab( const avatar &you )
             continue;
         }
         ++shown;
-        const int pct = you.get_skill_level_object( sk->ident() ).exercise();
-        ImGui::BulletText( "%s：Lv %d (%d%%)", name.c_str(), lvl, pct );
+        SkillLevel &sk_lvl = you.get_skill_level_object( sk->ident() );
+        const int pct = sk_lvl.exercise();
+        bool training = sk_lvl.isTraining();
+
+        ImGui::PushID( sk->ident().c_str() );
+        if( ImGui::Checkbox( "##train", &training ) ) {
+            sk_lvl.toggleTraining();
+        }
+        ImGui::SameLine();
+        if( training ) {
+            ImGui::Text( "%s：Lv %d (%d%%) [训练中]", name.c_str(), lvl, pct );
+        } else {
+            ImGui::TextDisabled( "%s：Lv %d (%d%%) [已暂停]", name.c_str(), lvl, pct );
+        }
+        ImGui::PopID();
     }
     if( shown == 0 ) {
         ImGui::TextDisabled( "没有符合条件的技能。" );
@@ -234,13 +247,29 @@ tab_kind current_tab()
     return g_tab;
 }
 
+bool is_skill_training( const skill_id &id )
+{
+    if( g == nullptr ) {
+        return false;
+    }
+    return get_avatar().get_skill_level_object( id ).isTraining();
+}
+
+bool toggle_skill_training( const skill_id &id )
+{
+    if( g == nullptr ) {
+        return false;
+    }
+    return get_avatar().get_skill_level_object( id ).toggleTraining();
+}
+
 auto read_stats_snapshot() -> stats_snapshot
 {
     stats_snapshot snap;
     if( g == nullptr ) {
         return snap;
     }
-    const avatar &you = get_avatar();
+    avatar &you = get_avatar();
     snap.str = you.get_str();
     snap.str_base = you.get_str_base();
     snap.dex = you.get_dex();
