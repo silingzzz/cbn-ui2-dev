@@ -12,6 +12,9 @@
 #include <unordered_map>
 #include <utility>
 
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "catalua.h"
@@ -276,6 +279,9 @@ std::vector<std::string> worldfactory::all_worldnames() const
 
 WORLDINFO *worldfactory::pick_world( bool show_prompt, bool empty_only )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     std::vector<std::string> world_names = all_worldnames();
 
     // Filter out special worlds (TUTORIAL | DEFENSE) from world_names.

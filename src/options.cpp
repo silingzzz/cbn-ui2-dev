@@ -12,6 +12,9 @@
 #include "calendar.h"
 #include "cached_options.h"
 #include "cached_item_options.h"
+#if defined( TILES )
+#include "cata_imgui.h"
+#endif
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "color.h"
@@ -3765,6 +3768,9 @@ struct string_col {
 std::string options_manager::show( bool ingame, const bool world_options_only,
                                    const std::function<bool()> &on_quit )
 {
+#if defined( TILES )
+    cata_imgui::legacy_popup_scope imgui_gate;
+#endif
     const int iWorldOptPage = std::ranges::find_if( pages_, [&]( const Page & p ) {
         return p.id_ == world_default;
     } ) - pages_.begin();
